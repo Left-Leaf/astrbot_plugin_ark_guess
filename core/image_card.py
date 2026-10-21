@@ -30,15 +30,18 @@ FAINT = (100, 116, 139)
 ACCENT = (245, 158, 11)
 BORDER = (148, 163, 184, 46)
 
-GREEN_BG = (20, 53, 40, 255)
+GREEN_BG = (16, 74, 52, 255)
 GREEN_BORDER = (34, 197, 94, 255)
-GREEN_TEXT = (134, 239, 172)
-YELLOW_BG = (58, 48, 14, 255)
+GREEN_TEXT = (187, 247, 208)
+YELLOW_BG = (74, 58, 10, 255)
 YELLOW_BORDER = (234, 179, 8, 255)
 YELLOW_TEXT = (253, 224, 71)
-GREY_BG = (30, 41, 59, 255)
-GREY_BORDER = (71, 85, 105, 255)
-GREY_TEXT = (203, 213, 241)
+BLUE_BG = (16, 52, 92, 255)
+BLUE_BORDER = (59, 130, 246, 255)
+BLUE_TEXT = (191, 219, 254)
+WRONG_BG = (70, 24, 28, 255)
+WRONG_BORDER = (239, 68, 68, 255)
+WRONG_TEXT = (254, 202, 202)
 
 LABELS = ("稀有度", "分支", "阵营", "种族", "实装")
 
@@ -145,7 +148,19 @@ def _tone(state: str) -> tuple[tuple[int, int, int, int], tuple[int, int, int, i
         return GREEN_BG, GREEN_BORDER, GREEN_TEXT
     if state == "close":
         return YELLOW_BG, YELLOW_BORDER, YELLOW_TEXT
-    return GREY_BG, GREY_BORDER, GREY_TEXT
+    if state in ("higher", "lower"):
+        return BLUE_BG, BLUE_BORDER, BLUE_TEXT
+    return WRONG_BG, WRONG_BORDER, WRONG_TEXT
+
+
+def _mark(state: str) -> str:
+    if state == "correct":
+        return "√"
+    if state == "close":
+        return "~"
+    if state == "wrong":
+        return "×"
+    return ""
 
 
 def _arrow(state: str) -> str:
@@ -165,11 +180,18 @@ def _draw_cell(
 ) -> None:
     x0, y0, x1, y1 = box
     background, border, color = _tone(state)
-    draw.rounded_rectangle(box, radius=12 * SCALE, fill=background, outline=border, width=1 * SCALE)
+    draw.rounded_rectangle(
+        box,
+        radius=12 * SCALE,
+        fill=background,
+        outline=border,
+        width=2 * SCALE,
+    )
 
     value_font = _font(14, bold=True)
     sub_font = _font(10)
-    display = f"{text} {_arrow(state)}".strip()
+    mark = _mark(state)
+    display = f"{mark} {text} {_arrow(state)}".strip()
     inner_w = (x1 - x0) - 12 * SCALE
     value_lines = _wrap_text(draw, display, value_font, inner_w, 2)
     sub_lines = _wrap_text(draw, sub, sub_font, inner_w, 1) if sub else []
@@ -387,9 +409,10 @@ def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -
     legend_font = _font(10)
     legend_x = x0
     for color, label in (
-        (GREEN_BORDER, "完全正确"),
-        (YELLOW_BORDER, "部分命中"),
-        (GREY_BORDER, "错误"),
+        (GREEN_BORDER, "√ 完全正确"),
+        (YELLOW_BORDER, "~ 部分命中"),
+        (BLUE_BORDER, "↑↓ 方向提示"),
+        (WRONG_BORDER, "× 错误"),
     ):
         draw.rounded_rectangle(
             (legend_x, legend_y + 2 * SCALE, legend_x + 9 * SCALE, legend_y + 11 * SCALE),

@@ -267,6 +267,52 @@ class ImageRenderTests(unittest.TestCase):
                     "应包含绿色正确色块",
                 )
 
+    def test_image_card_marks_direction_and_wrong(self) -> None:
+        pool = OperatorPool.from_records(
+            [
+                {
+                    "id": "char_ans",
+                    "name": "答案",
+                    "rarity": 6,
+                    "profession": "辅助",
+                    "subclass": "凝滞师",
+                    "faction": "罗德岛",
+                    "faction_hidden": [],
+                    "race": "菲林",
+                    "release_year": 2023,
+                },
+                {
+                    "id": "char_guess",
+                    "name": "猜测",
+                    "rarity": 4,
+                    "profession": "辅助",
+                    "subclass": "凝滞师",
+                    "faction": "维多利亚",
+                    "faction_hidden": [],
+                    "race": "龙",
+                    "release_year": 2019,
+                },
+            ],
+            version="test",
+        )
+        registry = GameRegistry(pool)
+        game = registry.create("s", answer_id="char_ans")
+        asyncio.run(registry.submit("s", "char_guess"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = render_board_image(game, pool, tmp)
+            with Image.open(path) as image:
+                pixels = image.convert("RGB").getcolors(maxcolors=image.width * image.height)
+                colors = [color for _, color in pixels or []]
+                self.assertTrue(
+                    any(b > 180 and r < 100 for r, g, b in colors),
+                    "数值方向提示应使用蓝色",
+                )
+                self.assertTrue(
+                    any(r > 180 and g < 120 and b < 120 for r, g, b in colors),
+                    "错误项应使用红色",
+                )
+
     def test_image_handles_empty_and_long_text(self) -> None:
         pool = OperatorPool.from_records(
             [
