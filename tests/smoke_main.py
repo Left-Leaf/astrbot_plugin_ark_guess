@@ -24,6 +24,15 @@ plugin = module.ArkGuessPlugin(object(), {"max_attempts": 8, "render_mode": "ima
 print(f"题库：{len(plugin.pool.operators)} 名干员，版本 {plugin.pool.version}")
 
 
+class FakeResult:
+    def __init__(self) -> None:
+        self.image = ""
+
+    def base64_image(self, payload: str) -> "FakeResult":
+        self.image = payload
+        return self
+
+
 class FakeEvent:
     """只实现指令层用到的事件接口。"""
 
@@ -40,16 +49,22 @@ class FakeEvent:
     def image_result(self, path: str) -> dict[str, str]:
         return {"type": "image", "path": str(path)}
 
+    def make_result(self) -> FakeResult:
+        return FakeResult()
+
     def stop_event(self) -> None:
         pass
 
 
-async def collect(generator) -> list[dict[str, str]]:
+async def collect(generator) -> list[object]:
     return [item async for item in generator]
 
 
-def show(result: dict[str, str]) -> None:
-    print(result.get("text") or result.get("path"))
+def show(result: object) -> None:
+    if isinstance(result, dict):
+        print(result.get("text") or result.get("path"))
+    else:
+        print(f"<image base64: {len(result.image)} chars>")  # type: ignore[attr-defined]
 
 
 async def main() -> None:

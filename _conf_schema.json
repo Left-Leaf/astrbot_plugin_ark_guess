@@ -20,7 +20,7 @@
     "default": 1
   },
   "render_mode": {
-    "description": "对局结果输出形式；image 使用 AstrBot HTML 渲染，失败自动回退 text",
+    "description": "对局结果输出形式；image 使用本地 Pillow 生成 PNG，失败自动回退 text",
     "type": "string",
     "default": "image",
     "options": ["image", "text"]

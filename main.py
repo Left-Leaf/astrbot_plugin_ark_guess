@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -25,7 +26,7 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 
 def _as_int(value: object, default: int) -> int:
@@ -59,9 +60,11 @@ class ArkGuessPlugin(Star):
 
         self._cleanup_task: asyncio.Task | None = None
         logger.info(
-            "猜干员插件已加载：题库版本 %s，共 %d 名干员",
+            "猜干员插件 v%s 已加载：题库版本 %s，共 %d 名干员，render_mode=%s",
+            VERSION,
             self.pool.version,
             len(self.pool.operators),
+            self._render_mode(),
         )
 
     # ------------------------------------------------------------------ 指令
@@ -198,7 +201,7 @@ class ArkGuessPlugin(Star):
 
     async def _respond_board(self, event: AstrMessageEvent, game):
         """对局结果优先在本地生成 PNG 图片，失败时回退文本表格。"""
-        if str(self.config.get("render_mode", "image")).lower() == "image":
+        if self._render_mode() == "image":
             try:
                 image_path = await asyncio.to_thread(
                     render_board_image,
@@ -206,10 +209,23 @@ class ArkGuessPlugin(Star):
                     self.pool,
                     self._cards_dir(),
                 )
-                return event.image_result(str(image_path))
+                payload = base64.b64encode(image_path.read_bytes()).decode("ascii")
+                logger.info(
+                    "已生成猜干员卡片：%s（%d bytes）",
+                    image_path,
+                    image_path.stat().st_size,
+                )
+                # 使用 base64 发送，避免协议端无法访问 AstrBot 本地文件路径
+                return event.make_result().base64_image(payload)
             except Exception:
                 logger.exception("本地卡片渲染失败，回退为文本结果")
         return event.plain_result(render_board(game, self.pool))
+
+    def _render_mode(self) -> str:
+        """未配置或配置为空时默认使用图片；只有明确 text 才走文本。"""
+        value = self.config.get("render_mode")
+        mode = str(value).strip().lower() if value is not None else ""
+        return "text" if mode == "text" else "image"
 
     def _cards_dir(self) -> Path:
         return Path(get_astrbot_data_path()) / "plugin_data" / PLUGIN_NAME / "cards"

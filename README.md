@@ -35,12 +35,13 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 
 ## 结果图片
 
-对局结果使用 Pillow 在本地绘制为 PNG：深色卡牌背景、五维色块、箭头与隐藏势力副标题，保存到 AstrBot `data/plugin_data/astrbot_plugin_ark_guess/cards/` 后作为图片消息发送。
+对局结果使用 Pillow 在本地绘制为 PNG：深色卡牌背景、五维色块、箭头与隐藏势力副标题，保存到 AstrBot `data/plugin_data/astrbot_plugin_ark_guess/cards/` 后以 base64 图片消息发送（协议端无需访问 AstrBot 本地文件）。
 
 - 不依赖 HTML 渲染服务或网络；
 - 超过 1 小时的图片会在清理任务中删除；
 - 中文字体优先使用微软雅黑 / Noto Sans CJK，Linux 部署需安装其中一种中文字体；
-- 绘图失败时自动回退为文本表格，设置 `render_mode=text` 可强制使用文本。
+- 绘图失败时自动回退为文本表格并记录异常日志，设置 `render_mode=text` 可强制使用文本；未配置或配置为空时默认走图片。
+- 启动日志会打印插件版本与解析后的 `render_mode`，每次出图会打印卡片路径与大小，便于确认运行的是哪份代码。
 
 ## 配置
 
