@@ -33,6 +33,15 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 
 阵营数据来自 PRTS `chara_data.ingameFaction`（所属势力）与 `hiddenFaction`（隐藏势力），多个势力以逗号分隔。
 
+## 结果图片
+
+对局结果使用 Pillow 在本地绘制为 PNG：深色卡牌背景、五维色块、箭头与隐藏势力副标题，保存到 AstrBot `data/plugin_data/astrbot_plugin_ark_guess/cards/` 后作为图片消息发送。
+
+- 不依赖 HTML 渲染服务或网络；
+- 超过 1 小时的图片会在清理任务中删除；
+- 中文字体优先使用微软雅黑 / Noto Sans CJK，Linux 部署需安装其中一种中文字体；
+- 绘图失败时自动回退为文本表格，设置 `render_mode=text` 可强制使用文本。
+
 ## 配置
 
 `_conf_schema.json` 支持：
@@ -43,7 +52,7 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 | `game_ttl_minutes` | 120 | 空闲对局回收时间（分钟），`<=0` 不回收 |
 | `cleanup_interval_seconds` | 600 | 过期检查间隔（秒） |
 | `min_rarity` | 1 | 出题池最低稀有度 |
-| `render_mode` | text | `text` 文本，`image` 使用 AstrBot 文转图 |
+| `render_mode` | image | `image` 本地 Pillow 生成 PNG 卡片；失败自动回退 `text` 文本表格 |
 
 ## 并发与实例隔离
 

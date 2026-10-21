@@ -20,9 +20,9 @@
     "default": 1
   },
   "render_mode": {
-    "description": "输出形式",
+    "description": "对局结果输出形式；image 使用 AstrBot HTML 渲染，失败自动回退 text",
     "type": "string",
-    "default": "text",
-    "options": ["text", "image"]
+    "default": "image",
+    "options": ["image", "text"]
   }
 }

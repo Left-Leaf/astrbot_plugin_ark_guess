@@ -19,7 +19,7 @@ sys.path.insert(0, str(ASTRBOT_ROOT))
 os.chdir(ASTRBOT_ROOT)
 
 module = importlib.import_module("astrbot_plugin_ark_guess.main")
-plugin = module.ArkGuessPlugin(object(), {"max_attempts": 8, "render_mode": "text"})
+plugin = module.ArkGuessPlugin(object(), {"max_attempts": 8, "render_mode": "image"})
 
 print(f"题库：{len(plugin.pool.operators)} 名干员，版本 {plugin.pool.version}")
 
@@ -37,6 +37,9 @@ class FakeEvent:
     def plain_result(self, text: str) -> dict[str, str]:
         return {"type": "text", "text": text}
 
+    def image_result(self, path: str) -> dict[str, str]:
+        return {"type": "image", "path": str(path)}
+
     def stop_event(self) -> None:
         pass
 
@@ -45,28 +48,32 @@ async def collect(generator) -> list[dict[str, str]]:
     return [item async for item in generator]
 
 
+def show(result: dict[str, str]) -> None:
+    print(result.get("text") or result.get("path"))
+
+
 async def main() -> None:
     event = FakeEvent()
 
     print("\n--- /粥一把 阿米娅（开局并立即猜一次）---")
     for result in await collect(plugin.ark_start(event, "阿米娅")):
-        print(result["text"])
+        show(result)
 
     print("\n--- /粥一把（已有对局）---")
     for result in await collect(plugin.ark_start(event, "")):
-        print(result["text"])
+        show(result)
 
     print("\n--- /粥一把 凯尔希（已有对局，不应新增猜测）---")
     for result in await collect(plugin.ark_start(event, "凯尔希")):
-        print(result["text"])
+        show(result)
 
     print("\n--- /不猜了 ---")
     for result in await collect(plugin.ark_end(event)):
-        print(result["text"])
+        show(result)
 
     print("\n--- /粥一把（结束后重新开局）---")
     for result in await collect(plugin.ark_start(event, "")):
-        print(result["text"])
+        show(result)
 
     await plugin.terminate()
 

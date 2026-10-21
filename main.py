@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from contextlib import suppress
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 from astrbot.core.star.filter.command import GreedyStr
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .core import (
     ArkGuessError,
@@ -20,9 +22,10 @@ from .core import (
     render_new_game,
 )
 from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
+from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.0.5"
+VERSION = "1.1.0"
 
 
 def _as_int(value: object, default: int) -> int:
@@ -76,11 +79,8 @@ class ArkGuessPlugin(Star):
         try:
             current = self.registry.current_game(session_key)
             if current is not None and current.playing:
-                yield await self._respond(
-                    event,
-                    f"当前群已有进行中的对局：{current.id}\n"
-                    + render_board(current, self.pool),
-                )
+                yield event.plain_result(f"当前群已有进行中的对局：{current.id}")
+                yield await self._respond_board(event, current)
                 return
 
             if query:
@@ -88,7 +88,7 @@ class ArkGuessPlugin(Star):
                 self.pool.resolve(query)
                 self.registry.start_or_get(session_key)
                 outcome = await self.registry.submit(session_key, query)
-                yield await self._respond(event, render_board(outcome.game, self.pool))
+                yield await self._respond_board(event, outcome.game)
             else:
                 game, _ = self.registry.start_or_get(session_key)
                 yield await self._respond(event, render_new_game(game, self.pool))
@@ -118,7 +118,7 @@ class ArkGuessPlugin(Star):
                 yield event.plain_result("没有输入干员名称。\n用法：/猜干员 <干员名>")
                 return
             outcome = await self.registry.submit(session_key, query)
-            yield await self._respond(event, render_board(outcome.game, self.pool))
+            yield await self._respond_board(event, outcome.game)
         except ArkGuessError as exc:
             yield event.plain_result(self._error_text(exc))
         except Exception:
@@ -147,7 +147,7 @@ class ArkGuessPlugin(Star):
             if game is None:
                 yield event.plain_result("当前群没有对局，发送 /粥一把 开始一局。")
             else:
-                yield await self._respond(event, render_board(game, self.pool, history=5))
+                yield await self._respond_board(event, game)
         finally:
             event.stop_event()
 
@@ -193,14 +193,26 @@ class ArkGuessPlugin(Star):
         return f"private:{event.unified_msg_origin}"
 
     async def _respond(self, event: AstrMessageEvent, text: str):
-        """按配置输出文本或文转图。"""
-        if str(self.config.get("render_mode", "text")).lower() == "image":
-            try:
-                image = await self.text_to_image(text)
-                return event.image_result(image)
-            except Exception:
-                logger.exception("文转图失败，回退为文本输出")
+        """普通提示信息使用文本。"""
         return event.plain_result(text)
+
+    async def _respond_board(self, event: AstrMessageEvent, game):
+        """对局结果优先在本地生成 PNG 图片，失败时回退文本表格。"""
+        if str(self.config.get("render_mode", "image")).lower() == "image":
+            try:
+                image_path = await asyncio.to_thread(
+                    render_board_image,
+                    game,
+                    self.pool,
+                    self._cards_dir(),
+                )
+                return event.image_result(str(image_path))
+            except Exception:
+                logger.exception("本地卡片渲染失败，回退为文本结果")
+        return event.plain_result(render_board(game, self.pool))
+
+    def _cards_dir(self) -> Path:
+        return Path(get_astrbot_data_path()) / "plugin_data" / PLUGIN_NAME / "cards"
 
     def _ensure_cleanup_task(self) -> None:
         if self._cleanup_task is not None and not self._cleanup_task.done():
@@ -221,8 +233,22 @@ class ArkGuessPlugin(Star):
                 expired = self.registry.cleanup_expired()
                 if expired:
                     logger.info("已回收 %d 个过期对局", len(expired))
+                self._cleanup_cards()
             except Exception:
                 logger.exception("回收过期对局失败")
+
+    def _cleanup_cards(self) -> None:
+        """删除一小时前生成的结果图片，避免磁盘堆积。"""
+        cards_dir = self._cards_dir()
+        if not cards_dir.exists():
+            return
+        cutoff = time.time() - 3600
+        for file in cards_dir.glob("*.png"):
+            try:
+                if file.stat().st_mtime < cutoff:
+                    file.unlink()
+            except OSError:
+                continue
 
     @staticmethod
     def _error_text(exc: ArkGuessError) -> str:

@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import random
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from PIL import Image
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN_ROOT))
@@ -23,6 +26,7 @@ from core.errors import (  # noqa: E402
 from core.game import GameRegistry  # noqa: E402
 from core.models import Operator  # noqa: E402
 from core.render import render_board, render_new_game  # noqa: E402
+from core.image_card import render_board_image  # noqa: E402
 
 
 def make_operator(
@@ -235,6 +239,60 @@ class RenderTests(unittest.TestCase):
         text = render_board(game, registry.pool)
         self.assertIn("🟨", text)
         self.assertIn("隐藏：罗德岛", text)
+
+
+class ImageRenderTests(unittest.TestCase):
+    def test_image_card_is_created_with_tone_colors(self) -> None:
+        registry = GameRegistry(make_pool())
+        game = registry.create("s", answer_id="char_a")
+        asyncio.run(registry.submit("s", "乙"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = render_board_image(game, registry.pool, tmp)
+            self.assertTrue(path.is_file())
+            self.assertGreater(path.stat().st_size, 0)
+
+            with Image.open(path) as image:
+                self.assertEqual(image.format, "PNG")
+                self.assertGreater(image.width, 800)
+                self.assertGreater(image.height, 200)
+                pixels = image.convert("RGB").getcolors(maxcolors=image.width * image.height)
+                colors = [color for _, color in pixels or []]
+                self.assertTrue(
+                    any(r > 200 and g > 150 and b < 80 for r, g, b in colors),
+                    "应包含黄色部分命中色块",
+                )
+                self.assertTrue(
+                    any(g > 150 and r < 100 and b < 140 for r, g, b in colors),
+                    "应包含绿色正确色块",
+                )
+
+    def test_image_handles_empty_and_long_text(self) -> None:
+        pool = OperatorPool.from_records(
+            [
+                {
+                    "id": "char_long",
+                    "name": "名字非常非常长的测试干员名称",
+                    "rarity": 6,
+                    "profession": "辅助",
+                    "subclass": "凝滞师",
+                    "faction": "罗德岛,罗德岛-精英干员,巴别塔",
+                    "faction_hidden": ["雷姆必拓", "巴别塔"],
+                    "race": "卡特斯/奇美拉",
+                    "release_year": 2020,
+                }
+            ]
+        )
+        registry = GameRegistry(pool)
+        game = registry.create("s", answer_id="char_long")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            empty_path = render_board_image(game, pool, tmp)
+            self.assertTrue(empty_path.is_file())
+
+            asyncio.run(registry.submit("s", "char_long"))
+            played_path = render_board_image(game, pool, tmp)
+            self.assertTrue(played_path.is_file())
 
 
 if __name__ == "__main__":
