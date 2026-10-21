@@ -9,7 +9,7 @@ desc: |
 
   **每个群固定只有一个对局**：/粥一把 开始（已有对局则返回当前进度），
   /猜干员 干员名 猜测，/不猜了 结束当前对局。
-version: 1.0.3
+version: 1.0.4
 author: Left-Leaf
 repo: https://github.com/Left-Leaf/astrbot_plugin_ark_guess
 astrbot_version: ">=4.9.2"

@@ -22,7 +22,7 @@ from .core import (
 from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 
 def _as_int(value: object, default: int) -> int:
@@ -92,21 +92,17 @@ class ArkGuessPlugin(Star):
         """猜测干员；必须先通过 /粥一把 开始对局。"""
         self._ensure_cleanup_task()
         query = str(arg).strip()
-        if not query:
-            yield event.plain_result(
-                "没有输入干员名称。\n"
-                "用法：/猜干员 <干员名>；首次游玩请先发送 /粥一把 开始对局。"
-            )
-            event.stop_event()
-            return
-
         session_key = self._session_key(event)
+
         try:
             current = self.registry.current_game(session_key)
             if current is None or not current.playing:
                 yield event.plain_result(
                     "当前没有进行中的对局，请先发送 /粥一把 创建对局。"
                 )
+                return
+            if not query:
+                yield event.plain_result("没有输入干员名称。\n用法：/猜干员 <干员名>")
                 return
             outcome = await self.registry.submit(session_key, query)
             yield await self._respond(event, render_board(outcome.game, self.pool))
