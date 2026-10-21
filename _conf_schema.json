@@ -14,11 +14,6 @@
     "type": "int",
     "default": 600
   },
-  "group_shared": {
-    "description": "群聊内是否整群共享同一局（关闭后每人独立一局）",
-    "type": "bool",
-    "default": true
-  },
   "min_rarity": {
     "description": "出题池最低稀有度（1-6）",
     "type": "int",

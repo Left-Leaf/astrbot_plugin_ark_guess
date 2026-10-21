@@ -90,21 +90,21 @@ def render_new_game(game: Game, pool: OperatorPool) -> str:
     pool_hint = f"{len(pool.operators)} 名干员" if answer else "题库"
     return (
         f"🎮 新对局已创建：{game.id}\n"
-        f"共 {game.max_attempts} 次机会，从 {pool_hint} 中猜出答案。\n"
-        "发送 /猜干员 <干员名> 开始；/猜干员状态 查看进度；/结束猜干员 放弃本局。\n"
+        f"本群共 {game.max_attempts} 次机会，从 {pool_hint} 中猜出答案。\n"
+        "发送 /猜干员 <干员名> 开始；/对局状态 查看进度；/不猜了 结束本局。\n"
         "图例：🟩 正确 ｜ 🟨 隐藏势力命中 ｜ ⬜ 错误 ｜ ⬆️ 答案更高/更晚 ｜ ⬇️ 答案更低/更早"
     )
 
 
 def render_help(prefix: str = "/") -> str:
     return (
-        "📖 明日方舟猜干员\n"
-        f"{prefix}猜干员            开始新对局\n"
-        f"{prefix}猜干员 <干员名>    猜测（支持干员 id）\n"
-        f"{prefix}猜干员状态         查看当前对局\n"
-        f"{prefix}结束猜干员         放弃本局\n"
-        f"{prefix}加入对局 <id>      加入其他会话创建的对局\n"
-        f"{prefix}猜干员统计         查看本进程对局数量\n\n"
+        "📖 明日方舟猜干员（每群一局）\n"
+        f"{prefix}粥一把             开始对局；已有对局时显示当前进度\n"
+        f"{prefix}猜干员 <干员名>    猜测（需先 {prefix}粥一把 开局）\n"
+        f"{prefix}不猜了             结束当前对局\n"
+        f"{prefix}对局状态           查看当前对局\n"
+        f"{prefix}对局统计           查看本进程对局数量\n"
+        f"{prefix}方舟帮助           查看本说明\n\n"
         "判定：稀有度 / 分支 / 阵营 / 种族 / 实装年份。\n"
         "阵营仅隐藏势力命中时显示 🟨。"
     )

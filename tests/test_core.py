@@ -178,6 +178,32 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(GameAlreadyActiveError):
             registry.create("s", answer_id="char_b")
 
+    def test_start_or_get_returns_existing_game(self) -> None:
+        registry = GameRegistry(make_pool())
+        first, created = registry.start_or_get("group:1", answer_id="char_a")
+        self.assertTrue(created)
+
+        second, created_again = registry.start_or_get("group:1")
+        self.assertFalse(created_again)
+        self.assertEqual(second.id, first.id)
+
+        other, other_created = registry.start_or_get("group:2")
+        self.assertTrue(other_created)
+        self.assertNotEqual(other.id, first.id)
+
+    def test_restart_after_close_creates_new_game(self) -> None:
+        registry = GameRegistry(make_pool())
+        first, _ = registry.start_or_get("group:1", answer_id="char_a")
+        registry.close("group:1")
+        second, created = registry.start_or_get("group:1", answer_id="char_b")
+        self.assertTrue(created)
+        self.assertNotEqual(second.id, first.id)
+
+    async def test_submit_without_game_raises(self) -> None:
+        registry = GameRegistry(make_pool())
+        with self.assertRaises(GameNotFoundError):
+            await registry.submit("group:1", "甲")
+
     def test_expired_games_are_recycled(self) -> None:
         clock = [datetime(2026, 1, 1, tzinfo=timezone.utc)]
         registry = GameRegistry(make_pool(), ttl_minutes=1, now=lambda: clock[0])

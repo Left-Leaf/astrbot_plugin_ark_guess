@@ -74,6 +74,26 @@ class GameRegistry:
     def get_game(self, game_id: str) -> Game | None:
         return self._games.get(game_id)
 
+    def start_or_get(
+        self,
+        session_key: str,
+        *,
+        answer_id: str | None = None,
+        max_attempts: int | None = None,
+    ) -> tuple[Game, bool]:
+        """开始对局；若该群已有进行中的对局则直接返回。
+
+        Returns:
+            (game, created)：created 为 True 表示本次新建。
+        """
+        existing = self.current_game(session_key)
+        if existing is not None and existing.playing:
+            return existing, False
+        return (
+            self.create(session_key, answer_id=answer_id, max_attempts=max_attempts),
+            True,
+        )
+
     def create(
         self,
         session_key: str,
@@ -89,7 +109,7 @@ class GameRegistry:
         existing = self.current_game(session_key)
         if existing is not None and existing.playing:
             raise GameAlreadyActiveError(
-                f"当前已有进行中的对局：{existing.id}",
+                f"当前已有进行中的对局：{existing.id}，发送 /粥一把 查看进度，或 /不猜了 结束",
                 game_id=existing.id,
             )
 
@@ -117,7 +137,7 @@ class GameRegistry:
         """提交一次猜测；同一对局内严格串行。"""
         game_id = self._active.get(session_key)
         if not game_id:
-            raise GameNotFoundError("当前没有进行中的对局，发送 /猜干员 开始")
+            raise GameNotFoundError("当前没有进行中的对局，请先发送 /粥一把 创建对局")
 
         lock = self._locks.get(game_id)
         if lock is None:
@@ -128,9 +148,12 @@ class GameRegistry:
             game = self._games.get(game_id)
             if game is None:
                 self._active.pop(session_key, None)
-                raise GameNotFoundError("对局已不存在，发送 /猜干员 开始新局")
+                raise GameNotFoundError("当前没有进行中的对局，请先发送 /粥一把 创建对局")
             if not game.playing:
-                raise GameFinishedError(f"对局 {game.id} 已结束（{game.status}）", game_id=game.id)
+                raise GameFinishedError(
+                    f"对局 {game.id} 已结束（{game.status}），发送 /粥一把 开始新对局",
+                    game_id=game.id,
+                )
 
             guess = self._pool.resolve(query)
             if any(record.operator_id == guess.id for record in game.guesses):
@@ -161,11 +184,11 @@ class GameRegistry:
             return SubmitOutcome(game=game, record=record, finished=not game.playing)
 
     def join(self, session_key: str, game_id: str) -> Game:
-        """通过对局 id（或唯一后缀）加入已有对局，用于跨会话/组队。"""
+        """保留内部方法：把会话绑定到已有对局（当前指令层未开放跨群加入）。"""
         existing = self.current_game(session_key)
         if existing is not None and existing.playing and existing.id != game_id:
             raise GameAlreadyActiveError(
-                f"当前已有进行中的对局：{existing.id}，请先 /结束猜干员",
+                f"当前已有进行中的对局：{existing.id}，请先 /不猜了",
                 game_id=existing.id,
             )
 

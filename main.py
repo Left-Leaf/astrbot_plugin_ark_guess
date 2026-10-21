@@ -22,7 +22,7 @@ from .core import (
 from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.0.0"
+VERSION = "1.0.2"
 
 
 def _as_int(value: object, default: int) -> int:
@@ -63,23 +63,52 @@ class ArkGuessPlugin(Star):
 
     # ------------------------------------------------------------------ 指令
 
-    @filter.command("猜干员", alias={"方舟猜干员"})
-    async def ark_guess(self, event: AstrMessageEvent, arg: GreedyStr):
-        """开始新局；带参数时直接猜测。"""
+    @filter.command("粥一把", alias={"开始猜干员"})
+    async def ark_start(self, event: AstrMessageEvent):
+        """开始对局；若当前群已有对局则返回该局进度。"""
         self._ensure_cleanup_task()
-        query = str(arg).strip()
         session_key = self._session_key(event)
 
         try:
-            if query:
-                current = self.registry.current_game(session_key)
-                if current is None or not current.playing:
-                    self.registry.create(session_key)
-                outcome = await self.registry.submit(session_key, query)
-                yield await self._respond(event, render_board(outcome.game, self.pool))
-            else:
-                game = self.registry.create(session_key)
+            game, created = self.registry.start_or_get(session_key)
+            if created:
                 yield await self._respond(event, render_new_game(game, self.pool))
+            else:
+                yield await self._respond(
+                    event,
+                    f"当前群已有进行中的对局：{game.id}\n"
+                    + render_board(game, self.pool),
+                )
+        except ArkGuessError as exc:
+            yield event.plain_result(self._error_text(exc))
+        except Exception:
+            logger.exception("粥一把指令执行失败")
+            yield event.plain_result("插件内部错误，请稍后再试")
+        finally:
+            event.stop_event()
+
+    @filter.command("猜干员", alias={"猜干员名字"})
+    async def ark_guess(self, event: AstrMessageEvent, arg: GreedyStr):
+        """猜测干员；必须先通过 /粥一把 开始对局。"""
+        self._ensure_cleanup_task()
+        query = str(arg).strip()
+        if not query:
+            yield event.plain_result(
+                "用法：/猜干员 <干员名>\n首次游玩请先发送 /粥一把 开始对局。"
+            )
+            event.stop_event()
+            return
+
+        session_key = self._session_key(event)
+        try:
+            current = self.registry.current_game(session_key)
+            if current is None or not current.playing:
+                yield event.plain_result(
+                    "当前没有进行中的对局，请先发送 /粥一把 创建对局。"
+                )
+                return
+            outcome = await self.registry.submit(session_key, query)
+            yield await self._respond(event, render_board(outcome.game, self.pool))
         except ArkGuessError as exc:
             yield event.plain_result(self._error_text(exc))
         except Exception:
@@ -88,13 +117,13 @@ class ArkGuessPlugin(Star):
         finally:
             event.stop_event()
 
-    @filter.command("结束猜干员", alias={"结束对局"})
+    @filter.command("不猜了", alias={"结束猜干员", "结束对局"})
     async def ark_end(self, event: AstrMessageEvent):
-        """结束并删除当前会话的对局。"""
+        """结束并删除当前群的对局。"""
         try:
             game = self.registry.close(self._session_key(event))
             if game is None:
-                yield event.plain_result("当前没有进行中的对局，发送 /猜干员 开始一局。")
+                yield event.plain_result("当前没有进行中的对局。")
             else:
                 yield event.plain_result(f"已结束对局 {game.id}。")
         finally:
@@ -102,30 +131,13 @@ class ArkGuessPlugin(Star):
 
     @filter.command("对局状态", alias={"猜干员状态"})
     async def ark_status(self, event: AstrMessageEvent):
-        """查看当前会话的对局。"""
+        """查看当前群的对局。"""
         try:
             game = self.registry.current_game(self._session_key(event))
             if game is None:
-                yield event.plain_result("当前没有对局，发送 /猜干员 开始一局。")
+                yield event.plain_result("当前群没有对局，发送 /粥一把 开始一局。")
             else:
                 yield await self._respond(event, render_board(game, self.pool, history=5))
-        finally:
-            event.stop_event()
-
-    @filter.command("加入对局")
-    async def ark_join(self, event: AstrMessageEvent, game_id: str = ""):
-        """加入其他会话创建的对局：/加入对局 <对局 id>。"""
-        try:
-            target = game_id.strip()
-            if not target:
-                yield event.plain_result("用法：/加入对局 <对局 id>，id 可在新局提示中看到。")
-                return
-            game = self.registry.join(self._session_key(event), target)
-            yield event.plain_result(
-                f"已加入对局 {game.id}，发送 /猜干员 <干员名> 开始猜。"
-            )
-        except ArkGuessError as exc:
-            yield event.plain_result(self._error_text(exc))
         finally:
             event.stop_event()
 
@@ -163,10 +175,12 @@ class ArkGuessPlugin(Star):
     # ---------------------------------------------------------------- 内部
 
     def _session_key(self, event: AstrMessageEvent) -> str:
-        """群聊默认整群共享一局；group_shared=false 时每人一局。"""
-        if bool(self.config.get("group_shared", True)):
-            return event.unified_msg_origin
-        return f"{event.unified_msg_origin}:{event.get_sender_id()}"
+        """每个群固定一个对局；私聊则按会话区分。"""
+        get_group_id = getattr(event, "get_group_id", None)
+        group_id = str(get_group_id() or "") if callable(get_group_id) else ""
+        if group_id:
+            return f"group:{group_id}"
+        return f"private:{event.unified_msg_origin}"
 
     async def _respond(self, event: AstrMessageEvent, text: str):
         """按配置输出文本或文转图。"""
@@ -205,5 +219,5 @@ class ArkGuessPlugin(Star):
         if isinstance(exc, AmbiguousOperatorError) and exc.candidates:
             return f"⚠️ {exc.message}：\n" + "\n".join(f"- {name}" for name in exc.candidates)
         if isinstance(exc, GameAlreadyActiveError):
-            return f"⚠️ {exc.message}\n发送 /猜干员 <干员名> 继续，或 /结束猜干员 放弃。"
+            return f"⚠️ {exc.message}\n发送 /粥一把 查看进度，或 /不猜了 结束。"
         return f"⚠️ {exc.message}"
