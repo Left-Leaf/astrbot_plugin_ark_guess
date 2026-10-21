@@ -24,12 +24,51 @@ plugin = module.ArkGuessPlugin(object(), {"max_attempts": 8, "render_mode": "tex
 print(f"题库：{len(plugin.pool.operators)} 名干员，版本 {plugin.pool.version}")
 
 
+class FakeEvent:
+    """只实现指令层用到的事件接口。"""
+
+    def __init__(self, group_id: str = "1") -> None:
+        self.group_id = group_id
+        self.unified_msg_origin = f"test:GroupMessage:{group_id}"
+
+    def get_group_id(self) -> str:
+        return self.group_id
+
+    def plain_result(self, text: str) -> dict[str, str]:
+        return {"type": "text", "text": text}
+
+    def stop_event(self) -> None:
+        pass
+
+
+async def collect(generator) -> list[dict[str, str]]:
+    return [item async for item in generator]
+
+
 async def main() -> None:
-    game = plugin.registry.create("smoke-session", answer_id="char_002_amiya")
-    print(f"对局：{game.id}")
-    outcome = await plugin.registry.submit("smoke-session", "阿米娅")
-    print(f"状态：{outcome.game.status}")
-    print(module.render_board(outcome.game, plugin.pool))
+    event = FakeEvent()
+
+    print("\n--- /粥一把 阿米娅（开局并立即猜一次）---")
+    for result in await collect(plugin.ark_start(event, "阿米娅")):
+        print(result["text"])
+
+    print("\n--- /粥一把（已有对局）---")
+    for result in await collect(plugin.ark_start(event, "")):
+        print(result["text"])
+
+    print("\n--- /粥一把 凯尔希（已有对局，不应新增猜测）---")
+    for result in await collect(plugin.ark_start(event, "凯尔希")):
+        print(result["text"])
+
+    print("\n--- /不猜了 ---")
+    for result in await collect(plugin.ark_end(event)):
+        print(result["text"])
+
+    print("\n--- /粥一把（结束后重新开局）---")
+    for result in await collect(plugin.ark_start(event, "")):
+        print(result["text"])
+
+    await plugin.terminate()
 
 
 asyncio.run(main())

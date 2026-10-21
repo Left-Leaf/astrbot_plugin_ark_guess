@@ -100,7 +100,8 @@ def render_help(prefix: str = "/") -> str:
     return (
         "📖 明日方舟猜干员（每群一局）\n"
         f"{prefix}粥一把             开始对局；已有对局时显示当前进度\n"
-        f"{prefix}猜干员 <干员名>    猜测（需先 {prefix}粥一把 开局）\n"
+        f"{prefix}粥一把 <干员名>    开始对局并立即猜一次\n"
+        f"{prefix}猜干员 <干员名>    继续猜测（需先 {prefix}粥一把 开局）\n"
         f"{prefix}不猜了             结束当前对局\n"
         f"{prefix}对局状态           查看当前对局\n"
         f"{prefix}对局统计           查看本进程对局数量\n"

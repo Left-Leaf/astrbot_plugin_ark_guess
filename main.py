@@ -22,7 +22,7 @@ from .core import (
 from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 
 def _as_int(value: object, default: int) -> int:
@@ -64,21 +64,34 @@ class ArkGuessPlugin(Star):
     # ------------------------------------------------------------------ 指令
 
     @filter.command("粥一把", alias={"开始猜干员"})
-    async def ark_start(self, event: AstrMessageEvent):
-        """开始对局；若当前群已有对局则返回该局进度。"""
+    async def ark_start(self, event: AstrMessageEvent, arg: GreedyStr):
+        """开始对局；带干员名时立即进行第一次猜测。
+
+        若当前群已有进行中的对局，则只提示已有对局并返回该局进度。
+        """
         self._ensure_cleanup_task()
+        query = str(arg).strip()
         session_key = self._session_key(event)
 
         try:
-            game, created = self.registry.start_or_get(session_key)
-            if created:
-                yield await self._respond(event, render_new_game(game, self.pool))
-            else:
+            current = self.registry.current_game(session_key)
+            if current is not None and current.playing:
                 yield await self._respond(
                     event,
-                    f"当前群已有进行中的对局：{game.id}\n"
-                    + render_board(game, self.pool),
+                    f"当前群已有进行中的对局：{current.id}\n"
+                    + render_board(current, self.pool),
                 )
+                return
+
+            if query:
+                # 先校验干员存在，避免无效名称创建出一个空对局
+                self.pool.resolve(query)
+                self.registry.start_or_get(session_key)
+                outcome = await self.registry.submit(session_key, query)
+                yield await self._respond(event, render_board(outcome.game, self.pool))
+            else:
+                game, _ = self.registry.start_or_get(session_key)
+                yield await self._respond(event, render_new_game(game, self.pool))
         except ArkGuessError as exc:
             yield event.plain_result(self._error_text(exc))
         except Exception:
