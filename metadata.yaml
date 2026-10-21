@@ -1,0 +1,22 @@
+name: astrbot_plugin_ark_guess
+display_name: 明日方舟猜干员
+short_desc: 五维提示猜干员，支持隐藏势力黄牌与多局并行
+desc: |
+  基于 PRTS 干员数据（434 名干员）的猜干员游戏。
+
+  每次猜测给出稀有度、分支、阵营、种族、实装年份五个维度的提示：
+  🟩 正确，🟨 隐藏势力命中，⬜ 错误，⬆️/⬇️ 表示答案更高/更晚或更低/更早。
+
+  每个会话自动绑定一个独立对局，对局拥有唯一 game id，可跨会话 /加入对局 组队；
+  不同会话的对局通过实例级 asyncio 锁互不干扰。
+
+  题库由外部 Node 数据管线生成（operators.json），随插件提供快照。
+version: 1.0.0
+author: Left-Leaf
+repo: https://github.com/Left-Leaf/astrbot_plugin_ark_guess
+astrbot_version: ">=4.9.2"
+tags:
+  - 明日方舟
+  - 猜干员
+  - 游戏
+  - PRTS

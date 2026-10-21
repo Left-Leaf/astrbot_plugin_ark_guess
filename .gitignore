@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+
+# AstrBot 在本地冒烟测试时可能生成的运行产物（不应入库）
+data/cmd_config.json
+data/t2i_templates/
+data/temp/

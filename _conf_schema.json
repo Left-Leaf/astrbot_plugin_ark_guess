@@ -1,0 +1,33 @@
+{
+  "max_attempts": {
+    "description": "每局最大猜测次数",
+    "type": "int",
+    "default": 8
+  },
+  "game_ttl_minutes": {
+    "description": "对局空闲回收时间（分钟），<=0 表示不回收",
+    "type": "int",
+    "default": 120
+  },
+  "cleanup_interval_seconds": {
+    "description": "过期对局检查间隔（秒）",
+    "type": "int",
+    "default": 600
+  },
+  "group_shared": {
+    "description": "群聊内是否整群共享同一局（关闭后每人独立一局）",
+    "type": "bool",
+    "default": true
+  },
+  "min_rarity": {
+    "description": "出题池最低稀有度（1-6）",
+    "type": "int",
+    "default": 1
+  },
+  "render_mode": {
+    "description": "输出形式",
+    "type": "string",
+    "default": "text",
+    "options": ["text", "image"]
+  }
+}
