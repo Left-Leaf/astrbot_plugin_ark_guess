@@ -14,6 +14,14 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 | `/对局统计` | 查看本进程内对局数量 |
 | `/方舟帮助` | 指令说明 |
 
+### 行为细节
+
+- `/粥一把`：无对局时创建；已有对局时提示对局 id 并返回当前进度，不会新建。
+- `/粥一把 <干员名>`：无对局时创建并立即把该干员作为第一次猜测；已有对局时只返回当前进度，不新增猜测；干员名不存在时不会创建对局。
+- `/猜干员 <干员名>`：没有对局时提示先发送 `/粥一把`；同一干员重复猜测会被拒绝。
+- `/猜干员`（无参数）：没有对局时提示先发送 `/粥一把`；已有对局时提示没有输入干员名称。
+- `/不猜了`：删除当前对局；没有对局时仅提示，不做其他操作。
+
 ## 判定规则
 
 每局按五个维度给出提示：
@@ -39,21 +47,23 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 
 ## 并发与实例隔离
 
-- 每个会话（`event.unified_msg_origin`）绑定一个独立对局；
-- 每局群（`event.get_group_id()`）固定绑定一个对局；私聊按会话区分；
+- 每个群（`event.get_group_id()`）固定绑定一个对局；私聊按会话区分；
 - 同一群再次发送 `/粥一把` 不会新建对局，而是返回当前进度；
 - 每局拥有 `game_<random>` 唯一 id，答案、猜测历史、状态只保存在该实例内；
 - 同一对局的提交由 `asyncio.Lock` 串行化，并发猜测不会丢失或覆盖；
-- 不同群保存在进程内存中，插件重载 / AstrBot 重启会丢失；空闲对局按 TTL 自动回收。
+- 不同群使用独立对局与独立锁，可并行推进；
+- 对局默认保存在进程内存中，插件重载 / AstrBot 重启会丢失；空闲对局按 TTL 自动回收。
 
 ## 数据更新
 
-题库由 `E:\project\Arknights` 的 Node 数据管线生成：
+题库由外部的 Node 数据管线生成（与本插件仓库分离）：
 
 ```powershell
-cd E:\project\Arknights
+# 在数据管线仓库中执行
 npm run fetch
-Copy-Item .\data\operators.json E:\project\AstrBot\data\plugins\astrbot_plugin_ark_guess\data\operators.json -Force
+
+# 将生成的 operators.json 复制到插件 data/ 目录
+Copy-Item .\data\operators.json <插件目录>\data\operators.json -Force
 ```
 
 然后在 AstrBot WebUI 的插件页重载插件。`operators.json` 中包含 `version`，插件启动日志会打印当前题库版本与干员数量。
@@ -63,12 +73,12 @@ Copy-Item .\data\operators.json E:\project\AstrBot\data\plugins\astrbot_plugin_a
 纯逻辑测试（不依赖 AstrBot）：
 
 ```powershell
-cd E:\project\AstrBot\data\plugins\astrbot_plugin_ark_guess
-E:\project\AstrBot\.venv\Scripts\python.exe -m unittest discover -s tests -v
+cd <插件目录>
+python -m unittest discover -s tests -v
 ```
 
-AstrBot 环境冒烟测试：
+AstrBot 环境冒烟测试（需使用安装了 AstrBot 依赖的 Python 解释器）：
 
 ```powershell
-E:\project\AstrBot\.venv\Scripts\python.exe tests\smoke_main.py
+python tests/smoke_main.py
 ```
