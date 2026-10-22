@@ -25,6 +25,30 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 - `不猜了`：裸发或@机器人后发送均可；结束并删除当前对局，无对局时不回复。
 - `/查干员 <关键词>`：只查询题库，最多返回 10 个干员名称；没有直接匹配时尝试推荐错字候选。检索不会创建或修改对局，也不消耗猜测次数。
 
+## 网页版
+
+网页小游戏由 GitHub Pages 托管，无需自备服务器。推送 `main` 后，GitHub Actions 会运行测试构建并自动发布：
+
+`https://left-leaf.github.io/astrbot_plugin_ark_guess/`
+
+首次启用时，在仓库 Settings → Pages → Build and deployment 中将 Source 设为 **GitHub Actions**。发布工作流成功后即可打开上述地址。
+
+网页对局、胜场与连胜记录保存在当前浏览器的 `localStorage`；不创建账号、不上传记录，也不会与 AstrBot 群聊对局同步。清除浏览器站点数据会删除本机进度。
+
+本地开发需要 Node.js 22 或更高版本：
+
+```powershell
+npm ci
+npm run dev
+```
+
+构建及规则测试：
+
+```powershell
+npm test
+npm run build
+```
+
 ## 判定规则
 
 每局按五个维度给出提示：

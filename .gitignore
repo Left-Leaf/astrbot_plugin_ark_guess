@@ -1,6 +1,9 @@
 __pycache__/
 *.pyc
 .venv/
+node_modules/
+dist/
+*.tsbuildinfo
 
 # AstrBot 在本地冒烟测试时可能生成的运行产物（不应入库）
 data/cmd_config.json
