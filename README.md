@@ -36,34 +36,12 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 
 ## 网页版
 
-网页小游戏由 GitHub Pages 托管，无需自备服务器。推送 `main` 后，GitHub Actions 会运行测试构建并自动发布：
+网页版已迁移到独立仓库，插件仓库不再包含前端工程：
 
-`https://left-leaf.github.io/astrbot_plugin_ark_guess/`
+- 源码：https://github.com/Left-Leaf/arknights-guess-web
+- 在线游玩：https://left-leaf.github.io/arknights-guess-web/
 
-首次启用时，在仓库 Settings → Pages → Build and deployment 中将 Source 设为 **GitHub Actions**。若首次运行在 `Configure GitHub Pages` 步骤失败，说明 Pages 尚未启用；启用后在 Actions 页重新运行该工作流即可。
-
-网页对局、胜场与连胜记录保存在当前浏览器的 `localStorage`；不创建账号、不上传记录，也不会与 AstrBot 群聊对局同步。清除浏览器站点数据会删除本机进度。对局中可点击“重新开始”换一局，结束后可点击“再开一局”。
-
-点击右上角齿轮打开“游戏设置”弹窗，可以调整：
-
-- **答案稀有度**：多选 1★–6★，只有勾选稀有度的干员会进入答案池，不影响可猜测范围。
-- **最大猜测次数**：正整数，或 `-1` 表示不限次数；`0` 与其他负数会被拒绝。
-
-设置保存在本机，并从下一局开始生效。
-
-本地开发需要 Node.js 22 或更高版本：
-
-```powershell
-npm ci
-npm run dev
-```
-
-构建及规则测试：
-
-```powershell
-npm test
-npm run build
-```
+网页版为纯前端应用，对局与设置保存在浏览器 `localStorage`，不会与群聊对局同步。
 
 ## 判定规则
 
