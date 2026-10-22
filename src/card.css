@@ -133,7 +133,7 @@ h1 span { color: var(--accent); }
   .search-wrap button { padding: 0 12px; font-size: 11px; }
   .form-hint { font-size: 9px; }
 
-  .board-labels, .guess-row { grid-template-columns: minmax(52px, 72px) repeat(5, minmax(0, 1fr)); gap: 3px; }
+  .board-labels, .guess-row { grid-template-columns: minmax(48px, 66px) 0.72fr 1.05fr 1.35fr 1.15fr 0.8fr; gap: 3px; }
   .board-labels { min-height: 30px; font-size: 7px; }
   .guess-list { gap: 5px; padding-bottom: 12px; }
   .guess-row { min-height: 54px; }
@@ -141,8 +141,8 @@ h1 span { color: var(--accent); }
   .guess-identity strong { font-size: 9px; }
   .guess-identity span { font-size: 6px; }
   .result-cell { gap: 1px; padding: 3px 1px; border-width: 1px; border-radius: 7px; }
-  .cell-main { font-size: 7px; }
-  .cell-sub { font-size: 5px; line-height: 1.1; }
+  .cell-main { display: -webkit-box; overflow: hidden; font-size: 7px; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  .cell-sub { font-size: 5px; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; }
 
   .empty-board { min-height: 84px; font-size: 11px; }
   .status-bar { padding: 11px 12px; border-radius: 9px; font-size: 11px; }
