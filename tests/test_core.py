@@ -44,6 +44,7 @@ def make_operator(
     hidden: tuple[str, ...] = (),
     race: str = "菲林",
     release_year: int = 2020,
+    debut: str = "",
 ) -> Operator:
     return Operator(
         id=operator_id,
@@ -55,6 +56,7 @@ def make_operator(
         faction_hidden=hidden,
         race=race,
         release_year=release_year,
+        debut=debut,
     )
 
 
@@ -79,6 +81,7 @@ def make_pool() -> OperatorPool:
                 "faction_hidden": list(operator.faction_hidden),
                 "race": operator.race,
                 "release_year": operator.release_year,
+                "debut": operator.debut,
             }
             for operator in operators
         ],
@@ -126,6 +129,10 @@ class DataTests(unittest.TestCase):
         pool = load_operator_pool(PLUGIN_ROOT / "data" / "operators.json")
         self.assertEqual(pool.resolve("阿米娅").id, "char_002_amiya")
         self.assertEqual(pool.resolve("char_002_amiya").name, "阿米娅")
+
+    def test_bundled_operator_has_debut_activity(self) -> None:
+        pool = load_operator_pool(PLUGIN_ROOT / "data" / "operators.json")
+        self.assertTrue(pool.resolve("阿米娅").debut)
 
     def test_unique_substring_and_ambiguity(self) -> None:
         pool = make_pool()
@@ -304,6 +311,32 @@ class RenderTests(unittest.TestCase):
         self.assertIn("🟨", text)
         self.assertIn("隐藏：罗德岛", text)
         self.assertIn("辅助/凝滞师", text)
+
+    def test_operator_debut_renders_as_subtitle(self) -> None:
+        pool = OperatorPool.from_records(
+            [
+                {
+                    "id": "char_debut",
+                    "name": "玛恩纳",
+                    "rarity": 6,
+                    "profession": "近卫",
+                    "subclass": "解放者",
+                    "faction": "卡西米尔",
+                    "faction_hidden": [],
+                    "race": "库兰塔",
+                    "release_year": 2022,
+                    "debut": "日暮寻路",
+                }
+            ]
+        )
+        registry = GameRegistry(pool)
+        game = registry.create("s", answer_id="char_debut")
+        asyncio.run(registry.submit("s", "玛恩纳"))
+        self.assertIn("登场：日暮寻路", render_board(game, pool))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = render_board_image(game, pool, tmp)
+            self.assertTrue(path.is_file())
 
 
 class ImageRenderTests(unittest.TestCase):

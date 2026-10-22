@@ -47,7 +47,7 @@ from .core.settings import (
 )
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
 MALYANAR_START_TRIGGER = "玛一把"
 MALYANAR_NAME = "玛恩纳"

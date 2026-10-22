@@ -120,6 +120,7 @@ def _parse_operator(raw: dict[str, Any]) -> Operator:
         faction = str(raw.get("faction") or "无").strip() or "无"
         race = str(raw.get("race") or "未知").strip() or "未知"
         release_year = int(raw["release_year"])
+        debut = str(raw.get("debut") or "").strip()
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"operators.json 记录格式错误：{raw!r}") from exc
 
@@ -143,6 +144,7 @@ def _parse_operator(raw: dict[str, Any]) -> Operator:
         faction_hidden=tuple(dict.fromkeys(hidden)),
         race=race,
         release_year=release_year,
+        debut=debut,
     )
 
 

@@ -22,6 +22,7 @@ class Operator:
     faction_hidden: tuple[str, ...]
     race: str
     release_year: int
+    debut: str = ""
 
 
 @dataclass(frozen=True, slots=True)

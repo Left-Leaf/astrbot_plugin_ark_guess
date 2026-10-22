@@ -46,7 +46,11 @@ def _operator_cells(item: object, result: CompareResult) -> tuple[Cell, ...]:
         Cell(f"{operator.profession}/{operator.subclass}", result.d2),
         Cell(operator.faction.replace(",", "、"), result.d3, hidden_sub),
         Cell(operator.race, result.d4),
-        Cell(str(operator.release_year), result.d5),
+        Cell(
+            str(operator.release_year),
+            result.d5,
+            f"登场：{operator.debut}" if operator.debut else "",
+        ),
     )
 
 
@@ -83,7 +87,7 @@ OPERATOR_PROFILE = GameProfile(
     title="猜干员",
     item_label="干员",
     labels=("稀有度", "职业 / 分支", "阵营", "种族", "实装"),
-    weights=(1.0, 1.2, 1.2, 1.0, 0.9),
+    weights=(0.9, 1.15, 1.1, 0.9, 1.45),
     start_command="猜干员",
     search_command="查干员",
     cells=_operator_cells,
