@@ -242,7 +242,7 @@ def _status(game: Game, pool: OperatorPool) -> tuple[str, str]:
         prefix = "猜中了！答案是" if game.status == "won" else "次数用尽，答案是"
         return f"{prefix} {detail}", game.status
     remaining = game.max_attempts - len(game.guesses)
-    return f"还剩 {remaining} 次机会 · 发送 /猜干员 <干员名> 继续", "playing"
+    return f"还剩 {remaining} 次机会 · 艾特机器人并发送干员名继续", "playing"
 
 
 def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -> Path:

@@ -109,7 +109,7 @@ class GameRegistry:
         existing = self.current_game(session_key)
         if existing is not None and existing.playing:
             raise GameAlreadyActiveError(
-                f"当前已有进行中的对局：{existing.id}，发送 /粥一把 查看进度，或 /不猜了 结束",
+                f"当前已有进行中的对局：{existing.id}，输入 猜干员 查看进度，或输入 不猜了 结束",
                 game_id=existing.id,
             )
 
@@ -137,7 +137,7 @@ class GameRegistry:
         """提交一次猜测；同一对局内严格串行。"""
         game_id = self._active.get(session_key)
         if not game_id:
-            raise GameNotFoundError("当前没有进行中的对局，请先发送 /粥一把 创建对局")
+            raise GameNotFoundError("当前没有进行中的对局，请先输入 猜干员 开始对局")
 
         lock = self._locks.get(game_id)
         if lock is None:
@@ -148,10 +148,10 @@ class GameRegistry:
             game = self._games.get(game_id)
             if game is None:
                 self._active.pop(session_key, None)
-                raise GameNotFoundError("当前没有进行中的对局，请先发送 /粥一把 创建对局")
+                raise GameNotFoundError("当前没有进行中的对局，请先输入 猜干员 开始对局")
             if not game.playing:
                 raise GameFinishedError(
-                    f"对局 {game.id} 已结束（{game.status}），发送 /粥一把 开始新对局",
+                    f"对局 {game.id} 已结束（{game.status}），输入 猜干员 开始新对局",
                     game_id=game.id,
                 )
 
@@ -188,7 +188,7 @@ class GameRegistry:
         existing = self.current_game(session_key)
         if existing is not None and existing.playing and existing.id != game_id:
             raise GameAlreadyActiveError(
-                f"当前已有进行中的对局：{existing.id}，请先 /不猜了",
+                f"当前已有进行中的对局：{existing.id}，输入 不猜了 结束当前对局",
                 game_id=existing.id,
             )
 

@@ -15,6 +15,8 @@ PLUGINS_DIR = Path(__file__).resolve().parents[2]
 ASTRBOT_ROOT = PLUGINS_DIR.parents[1]
 sys.path.insert(0, str(PLUGINS_DIR))
 sys.path.insert(0, str(ASTRBOT_ROOT))
+from astrbot.core.message.components import At, Plain
+
 # 切到 AstrBot 根目录，避免 AstrBot 把运行产物写进插件 data/
 os.chdir(ASTRBOT_ROOT)
 
@@ -39,9 +41,26 @@ class FakeEvent:
     def __init__(self, group_id: str = "1") -> None:
         self.group_id = group_id
         self.unified_msg_origin = f"test:GroupMessage:{group_id}"
+        self.self_id = "bot"
+        self.messages: list[object] = []
+        self.message_str = ""
+
+    def set_plain(self, text: str) -> None:
+        self.message_str = text
+        self.messages = [Plain(text=text)]
+
+    def set_mention(self, text: str) -> None:
+        self.message_str = text
+        self.messages = [At(qq=self.self_id), Plain(text=text)]
 
     def get_group_id(self) -> str:
         return self.group_id
+
+    def get_self_id(self) -> str:
+        return self.self_id
+
+    def get_messages(self) -> list[object]:
+        return self.messages
 
     def plain_result(self, text: str) -> dict[str, str]:
         return {"type": "text", "text": text}
@@ -69,41 +88,78 @@ def show(result: object) -> None:
 
 async def main() -> None:
     event = FakeEvent()
+    trigger_filter = module._GameTriggerFilter()
 
-    print("\n--- /粥一把 阿米娅（开局并立即猜一次）---")
-    for result in await collect(plugin.ark_start(event, "阿米娅")):
+    event.set_plain("大家准备猜干员了")
+    if trigger_filter.filter(event, None):
+        raise AssertionError("普通聊天不应触发裸指令处理器")
+
+    print("\n--- 猜干员（裸文本不应触发）---")
+    event.set_plain("猜干员")
+    if trigger_filter.filter(event, None):
+        raise AssertionError("主指令必须@机器人")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    if plugin.registry.current_game(plugin._session_key(event)) is not None:
+        raise AssertionError("裸文本猜干员不应开局")
+
+    print("\n--- @机器人 猜干员（开局）---")
+    event.set_mention("猜干员")
+    for result in await collect(plugin.group_game_trigger(event)):
         show(result)
 
     game = plugin.registry.current_game(plugin._session_key(event))
-    guesses_before_search = len(game.guesses) if game is not None else 0
-    print("\n--- /查干员 阿米（检索不应影响对局）---")
-    search_results = await collect(plugin.ark_search(event, "阿米"))
-    search_text = search_results[0]["text"]
-    expected_names = "\n".join(
-        operator.name for operator in plugin.pool.search("阿米", limit=10)
-    )
-    if search_text != expected_names:
-        raise AssertionError("检索结果应只包含干员名称")
-    for result in search_results:
-        show(result)
-    game_after_search = plugin.registry.current_game(plugin._session_key(event))
-    if game_after_search is None or len(game_after_search.guesses) != guesses_before_search:
-        raise AssertionError("干员检索不应创建对局或消耗猜测次数")
+    if game is None or game.guesses:
+        raise AssertionError("裸指令开局不应提交猜测")
 
-    print("\n--- /粥一把（已有对局）---")
-    for result in await collect(plugin.ark_start(event, "")):
+    print("\n--- @机器人 阿米娅（提交猜测）---")
+    event.set_mention("阿米娅")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    if len(game.guesses) != 1:
+        raise AssertionError("@机器人+干员名应提交一次猜测")
+
+    print("\n--- 玛一把（已有对局别名）---")
+    event.set_plain("玛一把")
+    for result in await collect(plugin.group_game_trigger(event)):
         show(result)
 
-    print("\n--- /粥一把 凯尔希（已有对局，不应新增猜测）---")
-    for result in await collect(plugin.ark_start(event, "凯尔希")):
+    print("\n--- @机器人 粥一把（已有对局别名）---")
+    event.set_mention("粥一把")
+    for result in await collect(plugin.group_game_trigger(event)):
         show(result)
 
-    print("\n--- /不猜了 ---")
-    for result in await collect(plugin.ark_end(event)):
+    print("\n--- 不猜了（结束对局）---")
+    event.set_plain("不猜了")
+    for result in await collect(plugin.group_game_trigger(event)):
         show(result)
 
-    print("\n--- /粥一把（结束后重新开局）---")
-    for result in await collect(plugin.ark_start(event, "")):
+    print("\n--- 不猜了（无对局应静默）---")
+    if await collect(plugin.group_game_trigger(event)):
+        raise AssertionError("无对局时不猜了应静默")
+
+    print("\n--- 玛一把（裸别名重新开局）---")
+    event.set_plain("玛一把")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    if plugin.registry.current_game(plugin._session_key(event)) is None:
+        raise AssertionError("玛一把别名应可裸文本开局")
+
+    event.set_plain("不猜了")
+    await collect(plugin.group_game_trigger(event))
+
+    print("\n--- @机器人 玛一把（提及别名开局）---")
+    event.set_mention("玛一把")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    if plugin.registry.current_game(plugin._session_key(event)) is None:
+        raise AssertionError("@机器人+玛一把应可开局")
+    event.set_plain("不猜了")
+    await collect(plugin.group_game_trigger(event))
+
+    print("\n--- 粥一把（裸别名重新开局）---")
+    event.set_plain("粥一把")
+    for result in await collect(plugin.group_game_trigger(event)):
         show(result)
 
     await plugin.terminate()

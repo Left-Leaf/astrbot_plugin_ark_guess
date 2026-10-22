@@ -79,7 +79,9 @@ def render_board(game: Game, pool: OperatorPool, history: int = 3) -> str:
     elif game.status == "lost":
         lines.append(f"❌ 次数用尽。{_answer_line(game, pool)}")
     else:
-        lines.append(f"还剩 {game.max_attempts - len(game.guesses)} 次机会，发送 /猜干员 <干员名> 继续")
+        lines.append(
+            f"还剩 {game.max_attempts - len(game.guesses)} 次机会，艾特机器人并发送干员名继续"
+        )
 
     return "\n".join(lines)
 
@@ -91,7 +93,7 @@ def render_new_game(game: Game, pool: OperatorPool) -> str:
     return (
         f"🎮 新对局已创建：{game.id}\n"
         f"本群共 {game.max_attempts} 次机会，从 {pool_hint} 中猜出答案。\n"
-        "发送 /猜干员 <干员名> 开始；/对局状态 查看进度；/不猜了 结束本局。\n"
+        "艾特机器人并发送干员名进行猜测；输入 不猜了 结束本局。\n"
         "图例：🟩 正确 ｜ 🟨 隐藏势力命中 ｜ ⬜ 错误 ｜ ⬆️ 答案更高/更晚 ｜ ⬇️ 答案更低/更早"
     )
 
@@ -99,11 +101,11 @@ def render_new_game(game: Game, pool: OperatorPool) -> str:
 def render_help(prefix: str = "/") -> str:
     return (
         "📖 明日方舟猜干员（每群一局）\n"
-        f"{prefix}粥一把             开始对局；已有对局时显示当前进度\n"
-        f"{prefix}粥一把 <干员名>    开始对局并立即猜一次\n"
-        f"{prefix}猜干员 <干员名>    继续猜测（需先 {prefix}粥一把 开局）\n"
+        "@机器人 猜干员             开始对局；已有对局时显示当前进度\n"
+        "玛一把 / 粥一把             可裸发或@机器人开始对局\n"
+        "@机器人 <干员名>            提交猜测（需先开始对局）\n"
         f"{prefix}查干员 <关键词>    检索干员资料，不影响对局\n"
-        f"{prefix}不猜了             结束当前对局\n"
+        "不猜了                      结束当前对局（无对局时静默）\n"
         f"{prefix}对局状态           查看当前对局\n"
         f"{prefix}对局统计           查看本进程对局数量\n"
         f"{prefix}方舟帮助           查看本说明\n\n"

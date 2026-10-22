@@ -10,7 +10,9 @@ from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event.filter import CustomFilter, EventMessageType
 from astrbot.api.star import Context, Star, register
+from astrbot.core.message.components import At, Plain
 from astrbot.core.star.filter.command import GreedyStr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -26,7 +28,41 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.2.1"
+VERSION = "1.3.0"
+START_TRIGGERS = frozenset({"猜干员", "玛一把", "粥一把"})
+BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
+END_TRIGGER = "不猜了"
+
+
+def _plain_message_text(event: AstrMessageEvent) -> str | None:
+    messages = event.get_messages()
+    if not messages or not all(isinstance(message, Plain) for message in messages):
+        return None
+    return "".join(message.text for message in messages).strip()
+
+
+def _mentioned_text(event: AstrMessageEvent) -> str | None:
+    mentioned = False
+    text: list[str] = []
+    for message in event.get_messages():
+        if isinstance(message, At):
+            if str(message.qq) != str(event.get_self_id()):
+                return None
+            mentioned = True
+        elif isinstance(message, Plain):
+            text.append(message.text)
+        else:
+            return None
+    query = "".join(text).strip()
+    return query if mentioned and query else None
+
+
+class _GameTriggerFilter(CustomFilter):
+    def filter(self, event: AstrMessageEvent, cfg) -> bool:
+        plain_text = _plain_message_text(event)
+        if plain_text in BARE_START_ALIASES or plain_text == END_TRIGGER:
+            return True
+        return _mentioned_text(event) is not None
 
 
 def _as_int(value: object, default: int) -> int:
@@ -69,63 +105,53 @@ class ArkGuessPlugin(Star):
 
     # ------------------------------------------------------------------ 指令
 
-    @filter.command("粥一把", alias={"开始猜干员"})
-    async def ark_start(self, event: AstrMessageEvent, arg: GreedyStr):
-        """开始对局；带干员名时立即进行第一次猜测。
-
-        若当前群已有进行中的对局，则只提示已有对局并返回该局进度。
-        """
-        self._ensure_cleanup_task()
-        query = str(arg).strip()
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    @filter.custom_filter(_GameTriggerFilter)
+    async def group_game_trigger(self, event: AstrMessageEvent):
+        """仅处理明确的群聊裸指令和 @机器人猜测。"""
+        plain_text = _plain_message_text(event)
+        mentioned_text = _mentioned_text(event)
         session_key = self._session_key(event)
 
-        try:
-            current = self.registry.current_game(session_key)
-            if current is not None and current.playing:
-                yield event.plain_result(f"当前群已有进行中的对局：{current.id}")
-                yield await self._respond_board(event, current)
-                return
-
-            if query:
-                # 先校验干员存在，避免无效名称创建出一个空对局
-                self.pool.resolve(query)
-                self.registry.start_or_get(session_key)
-                outcome = await self.registry.submit(session_key, query)
-                yield await self._respond_board(event, outcome.game)
-            else:
+        if plain_text in BARE_START_ALIASES or mentioned_text in START_TRIGGERS:
+            self._ensure_cleanup_task()
+            try:
+                current = self.registry.current_game(session_key)
+                if current is not None and current.playing:
+                    yield event.plain_result(f"当前群已有进行中的对局：{current.id}")
+                    yield await self._respond_board(event, current)
+                    return
                 game, _ = self.registry.start_or_get(session_key)
                 yield await self._respond(event, render_new_game(game, self.pool))
-        except ArkGuessError as exc:
-            yield event.plain_result(self._error_text(exc))
-        except Exception:
-            logger.exception("粥一把指令执行失败")
-            yield event.plain_result("插件内部错误，请稍后再试")
-        finally:
+            except ArkGuessError as exc:
+                yield event.plain_result(self._error_text(exc))
+            except Exception:
+                logger.exception("开始猜干员对局失败")
+                yield event.plain_result("插件内部错误，请稍后再试")
+            finally:
+                event.stop_event()
+            return
+
+        if plain_text == END_TRIGGER:
+            game = self.registry.close(session_key)
+            if game is not None:
+                yield event.plain_result(f"已结束对局 {game.id}。")
             event.stop_event()
+            return
 
-    @filter.command("猜干员", alias={"猜干员名字"})
-    async def ark_guess(self, event: AstrMessageEvent, arg: GreedyStr):
-        """猜测干员；必须先通过 /粥一把 开始对局。"""
+        query = mentioned_text
+        current = self.registry.current_game(session_key)
+        if query is None or current is None or not current.playing:
+            return
+
         self._ensure_cleanup_task()
-        query = str(arg).strip()
-        session_key = self._session_key(event)
-
         try:
-            current = self.registry.current_game(session_key)
-            if current is None or not current.playing:
-                yield event.plain_result(
-                    "当前没有进行中的对局，请先发送 /粥一把 创建对局。"
-                )
-                return
-            if not query:
-                yield event.plain_result("没有输入干员名称。\n用法：/猜干员 <干员名>")
-                return
             outcome = await self.registry.submit(session_key, query)
             yield await self._respond_board(event, outcome.game)
         except ArkGuessError as exc:
             yield event.plain_result(self._error_text(exc))
         except Exception:
-            logger.exception("猜干员指令执行失败")
+            logger.exception("@机器人猜干员失败")
             yield event.plain_result("插件内部错误，请稍后再试")
         finally:
             event.stop_event()
@@ -148,25 +174,13 @@ class ArkGuessPlugin(Star):
         finally:
             event.stop_event()
 
-    @filter.command("不猜了", alias={"结束猜干员", "结束对局"})
-    async def ark_end(self, event: AstrMessageEvent):
-        """结束并删除当前群的对局。"""
-        try:
-            game = self.registry.close(self._session_key(event))
-            if game is None:
-                yield event.plain_result("当前没有进行中的对局。")
-            else:
-                yield event.plain_result(f"已结束对局 {game.id}。")
-        finally:
-            event.stop_event()
-
     @filter.command("对局状态", alias={"猜干员状态"})
     async def ark_status(self, event: AstrMessageEvent):
         """查看当前群的对局。"""
         try:
             game = self.registry.current_game(self._session_key(event))
             if game is None:
-                yield event.plain_result("当前群没有对局，发送 /粥一把 开始一局。")
+                yield event.plain_result("当前群没有对局，艾特机器人并发送 猜干员 开始一局。")
             else:
                 yield await self._respond_board(event, game)
         finally:
@@ -289,5 +303,5 @@ class ArkGuessPlugin(Star):
         if isinstance(exc, AmbiguousOperatorError) and exc.candidates:
             return f"⚠️ {exc.message}：\n" + "\n".join(f"- {name}" for name in exc.candidates)
         if isinstance(exc, GameAlreadyActiveError):
-            return f"⚠️ {exc.message}\n发送 /粥一把 查看进度，或 /不猜了 结束。"
+            return f"⚠️ {exc.message}"
         return f"⚠️ {exc.message}"
