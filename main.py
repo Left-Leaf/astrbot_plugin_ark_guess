@@ -6,6 +6,7 @@ import asyncio
 import base64
 import time
 from contextlib import suppress
+from dataclasses import replace
 from pathlib import Path
 
 from astrbot.api import logger
@@ -25,9 +26,21 @@ from .core import (
 )
 from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
+from .core.settings import (
+    ATTEMPTS_TRIGGER,
+    RARITY_TRIGGER,
+    RESET_TRIGGER,
+    VIEW_TRIGGER,
+    GroupSettings,
+    GroupSettingsStore,
+    is_difficulty_text,
+    normalize_command_text,
+    parse_attempt_limit,
+    parse_rarity_pool,
+)
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.3.4"
+VERSION = "1.4.0"
 BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
 MALYANAR_START_TRIGGER = "玛一把"
 MALYANAR_NAME = "玛恩纳"
@@ -75,6 +88,7 @@ class _GameTriggerFilter(CustomFilter):
             plain_text in BARE_START_ALIASES
             or _command_argument(plain_text, QUICK_GUESS_START_TRIGGER) is not None
             or plain_text == END_TRIGGER
+            or is_difficulty_text(plain_text)
         ):
             return True
         return _mentioned_text(event) is not None
@@ -102,11 +116,22 @@ class ArkGuessPlugin(Star):
 
         data_file = Path(__file__).parent / "data" / "operators.json"
         self.pool = load_operator_pool(data_file)
+        min_rarity = min(6, max(1, _as_int(self.config.get("min_rarity"), 1)))
+        default_attempts = _as_int(self.config.get("max_attempts"), 8)
+        if default_attempts == 0 or default_attempts < -1:
+            default_attempts = 8
         self.registry = GameRegistry(
             self.pool,
-            max_attempts=_as_int(self.config.get("max_attempts"), 8),
+            max_attempts=default_attempts,
             ttl_minutes=_as_int(self.config.get("game_ttl_minutes"), 120),
-            min_rarity=_as_int(self.config.get("min_rarity"), 1),
+            min_rarity=min_rarity,
+        )
+        self.group_settings = GroupSettingsStore(
+            self._group_settings_path(),
+            GroupSettings(
+                rarities=tuple(range(min_rarity, 7)),
+                max_attempts=default_attempts,
+            ),
         )
 
         self._cleanup_task: asyncio.Task | None = None
@@ -126,6 +151,9 @@ class ArkGuessPlugin(Star):
         """仅处理明确的群聊裸指令和 @机器人猜测。"""
         plain_text = _plain_message_text(event)
         mentioned_text = _mentioned_text(event)
+        command_text = normalize_command_text(
+            plain_text if plain_text is not None else mentioned_text
+        )
         session_key = self._session_key(event)
         mentioned_main_guess = _command_argument(mentioned_text, MAIN_START_TRIGGER)
         mentioned_quick_guess = _command_argument(mentioned_text, QUICK_GUESS_START_TRIGGER)
@@ -172,7 +200,12 @@ class ArkGuessPlugin(Star):
                     yield await self._respond_board(event, current)
                     return
                 self.pool.resolve(guess_name)
-                self.registry.start_or_get(session_key)
+                settings = self.group_settings.get(session_key)
+                self.registry.start_or_get(
+                    session_key,
+                    max_attempts=settings.max_attempts,
+                    rarities=settings.rarities,
+                )
                 outcome = await self.registry.submit(session_key, guess_name)
                 yield await self._respond_board(event, outcome.game)
             except ArkGuessError as exc:
@@ -188,6 +221,75 @@ class ArkGuessPlugin(Star):
             game = self.registry.close(session_key)
             if game is not None:
                 yield event.plain_result(f"已结束对局 {game.id}。")
+            event.stop_event()
+            return
+
+        if command_text == VIEW_TRIGGER:
+            yield event.plain_result(self._difficulty_text(session_key))
+            event.stop_event()
+            return
+
+        if command_text == RARITY_TRIGGER:
+            settings = self.group_settings.get(session_key)
+            yield event.plain_result(
+                "⚙️ 本群角色池\n"
+                f"答案稀有度：{self._rarity_text(settings)}\n"
+                "修改：角色池设置 1256（只填 1-6，可任意组合）"
+            )
+            event.stop_event()
+            return
+
+        if command_text == ATTEMPTS_TRIGGER:
+            settings = self.group_settings.get(session_key)
+            yield event.plain_result(
+                "⚙️ 本群猜测次数\n"
+                f"最大猜测次数：{self._attempts_text(settings)}\n"
+                "修改：猜测次数 8；-1 表示不限次数"
+            )
+            event.stop_event()
+            return
+
+        if command_text == RESET_TRIGGER:
+            cleared = self.group_settings.clear(session_key)
+            yield event.plain_result(
+                "✅ 已恢复本群默认难度。" if cleared else "当前已是默认难度。"
+            )
+            event.stop_event()
+            return
+
+        if command_text.startswith(f"{RARITY_TRIGGER} "):
+            args = command_text[len(RARITY_TRIGGER) :].strip()
+            try:
+                rarities = parse_rarity_pool(args)
+            except ValueError as exc:
+                yield event.plain_result(f"⚠️ {exc}")
+                event.stop_event()
+                return
+            current = self.group_settings.get(session_key)
+            self.group_settings.set(session_key, replace(current, rarities=rarities))
+            yield event.plain_result(
+                "✅ 本群角色池已更新（下一局生效）\n"
+                f"答案稀有度：{self._rarity_text(self.group_settings.get(session_key))}"
+            )
+            event.stop_event()
+            return
+
+        if command_text.startswith(f"{ATTEMPTS_TRIGGER} "):
+            args = command_text[len(ATTEMPTS_TRIGGER) :].strip()
+            try:
+                attempts = parse_attempt_limit(args)
+            except ValueError as exc:
+                yield event.plain_result(f"⚠️ {exc}")
+                event.stop_event()
+                return
+            current = self.group_settings.get(session_key)
+            self.group_settings.set(
+                session_key, replace(current, max_attempts=attempts)
+            )
+            yield event.plain_result(
+                "✅ 本群猜测次数已更新（下一局生效）\n"
+                f"最大猜测次数：{self._attempts_text(self.group_settings.get(session_key))}"
+            )
             event.stop_event()
             return
 
@@ -313,6 +415,32 @@ class ArkGuessPlugin(Star):
 
     def _cards_dir(self) -> Path:
         return Path(get_astrbot_data_path()) / "plugin_data" / PLUGIN_NAME / "cards"
+
+    def _group_settings_path(self) -> Path:
+        return (
+            Path(get_astrbot_data_path())
+            / "plugin_data"
+            / PLUGIN_NAME
+            / "group_settings.json"
+        )
+
+    @staticmethod
+    def _rarity_text(settings: GroupSettings) -> str:
+        return "、".join(f"{rarity}★" for rarity in settings.rarities)
+
+    @staticmethod
+    def _attempts_text(settings: GroupSettings) -> str:
+        return "不限" if settings.max_attempts == -1 else f"{settings.max_attempts} 次"
+
+    def _difficulty_text(self, session_key: str) -> str:
+        settings = self.group_settings.get(session_key)
+        source = "本群自定义" if self.group_settings.has(session_key) else "默认"
+        return (
+            f"⚙️ 本群难度（{source}）\n"
+            f"答案稀有度：{self._rarity_text(settings)}\n"
+            f"最大猜测次数：{self._attempts_text(settings)}\n"
+            "修改：角色池设置 1256；猜测次数 8；-1 表示不限"
+        )
 
     def _ensure_cleanup_task(self) -> None:
         if self._cleanup_task is not None and not self._cleanup_task.done():

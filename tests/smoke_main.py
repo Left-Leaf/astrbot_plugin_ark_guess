@@ -94,6 +94,13 @@ async def main() -> None:
     if trigger_filter.filter(event, None):
         raise AssertionError("普通聊天不应触发裸指令处理器")
 
+    event.set_plain("角色池设置 6")
+    if trigger_filter.filter(event, None):
+        raise AssertionError("难度设置指令必须带斜杠")
+    event.set_plain("/角色池设置 6")
+    if not trigger_filter.filter(event, None):
+        raise AssertionError("带斜杠的角色池设置应触发")
+
     print("\n--- 猜干员（裸文本不应触发）---")
     event.set_plain("猜干员")
     if trigger_filter.filter(event, None):
@@ -203,6 +210,38 @@ async def main() -> None:
     game = plugin.registry.current_game(plugin._session_key(event))
     if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
         raise AssertionError("@机器人 粥一把 干员名应以该干员作为首猜")
+
+    event.set_plain("不猜了")
+    await collect(plugin.group_game_trigger(event))
+
+    print("\n--- /角色池设置 6 ---")
+    event.set_plain("/角色池设置 6")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+
+    print("\n--- /猜测次数 -1 ---")
+    event.set_plain("/猜测次数 -1")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+
+    print("\n--- 猜干员 阿米娅（应用本群难度）---")
+    event.set_mention("猜干员 阿米娅")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    game = plugin.registry.current_game(plugin._session_key(event))
+    if game is None or game.max_attempts != -1:
+        raise AssertionError("本群猜测次数应应用 -1")
+    answer = plugin.pool.by_id[game.answer_id]
+    if answer.rarity != 6:
+        raise AssertionError("本群角色池应只从 6 星出题")
+
+    event.set_plain("不猜了")
+    await collect(plugin.group_game_trigger(event))
+
+    print("\n--- /重置难度 ---")
+    event.set_plain("/重置难度")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
 
     await plugin.terminate()
 

@@ -21,6 +21,7 @@ from core.errors import (  # noqa: E402
     DuplicateGuessError,
     GameAlreadyActiveError,
     GameNotFoundError,
+    InvalidMaxAttemptsError,
     UnknownOperatorError,
 )
 from core.game import GameRegistry  # noqa: E402
@@ -192,6 +193,54 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         registry.create("s", answer_id="char_a")
         with self.assertRaises(GameAlreadyActiveError):
             registry.create("s", answer_id="char_b")
+
+    def test_invalid_attempt_limits_are_rejected(self) -> None:
+        registry = GameRegistry(make_pool())
+        for attempts in (0, -2):
+            with self.subTest(attempts=attempts), self.assertRaises(InvalidMaxAttemptsError):
+                registry.create(f"s{attempts}", answer_id="char_a", max_attempts=attempts)
+
+    async def test_unlimited_attempts_never_lose(self) -> None:
+        registry = GameRegistry(make_pool(), max_attempts=1)
+        game = registry.create("s", answer_id="char_a", max_attempts=-1)
+        for name in ["乙", "丙", "丁", "戊", "己"]:
+            outcome = await registry.submit("s", name)
+            self.assertTrue(outcome.game.playing)
+        self.assertEqual(game.status, "playing")
+        self.assertEqual(len(game.guesses), 5)
+
+    def test_rarity_pool_limits_answer(self) -> None:
+        pool = OperatorPool.from_records(
+            [
+                {
+                    "id": "char_4",
+                    "name": "四星",
+                    "rarity": 4,
+                    "profession": "辅助",
+                    "subclass": "凝滞师",
+                    "faction": "罗德岛",
+                    "faction_hidden": [],
+                    "race": "菲林",
+                    "release_year": 2020,
+                },
+                {
+                    "id": "char_6",
+                    "name": "六星",
+                    "rarity": 6,
+                    "profession": "辅助",
+                    "subclass": "凝滞师",
+                    "faction": "罗德岛",
+                    "faction_hidden": [],
+                    "race": "菲林",
+                    "release_year": 2021,
+                },
+            ],
+            version="test",
+        )
+        registry = GameRegistry(pool)
+        game = registry.create("s", max_attempts=-1, rarities=(4,))
+        self.assertEqual(game.max_attempts, -1)
+        self.assertEqual(pool.by_id[game.answer_id].rarity, 4)
 
     def test_start_or_get_returns_existing_game(self) -> None:
         registry = GameRegistry(make_pool())

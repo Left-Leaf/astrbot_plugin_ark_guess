@@ -80,6 +80,7 @@ class GameRegistry:
         *,
         answer_id: str | None = None,
         max_attempts: int | None = None,
+        rarities: tuple[int, ...] | None = None,
     ) -> tuple[Game, bool]:
         """开始对局；若该群已有进行中的对局则直接返回。
 
@@ -90,7 +91,12 @@ class GameRegistry:
         if existing is not None and existing.playing:
             return existing, False
         return (
-            self.create(session_key, answer_id=answer_id, max_attempts=max_attempts),
+            self.create(
+                session_key,
+                answer_id=answer_id,
+                max_attempts=max_attempts,
+                rarities=rarities,
+            ),
             True,
         )
 
@@ -100,11 +106,14 @@ class GameRegistry:
         *,
         answer_id: str | None = None,
         max_attempts: int | None = None,
+        rarities: tuple[int, ...] | None = None,
     ) -> Game:
         """为会话创建新对局；答案固定保存在该实例内。"""
         attempts = self._default_max_attempts if max_attempts is None else max_attempts
-        if not isinstance(attempts, int) or attempts < 1:
-            raise InvalidMaxAttemptsError(f"maxAttempts 必须为正整数，收到：{attempts}")
+        if not isinstance(attempts, int) or attempts == 0 or attempts < -1:
+            raise InvalidMaxAttemptsError(
+                f"maxAttempts 必须为正整数或 -1（不限次数），收到：{attempts}"
+            )
 
         existing = self.current_game(session_key)
         if existing is not None and existing.playing:
@@ -118,7 +127,7 @@ class GameRegistry:
             if answer is None:
                 raise UnknownOperatorError(f"答案干员不在题库中：{answer_id}")
         else:
-            answer = self._pool.random_operator(self._rng, self._min_rarity)
+            answer = self._pool.random_operator(self._rng, self._min_rarity, rarities)
 
         timestamp = self._now()
         game = Game(
@@ -177,7 +186,7 @@ class GameRegistry:
             if guess.id == game.answer_id:
                 game.status = "won"
                 game.finished_at = timestamp
-            elif len(game.guesses) >= game.max_attempts:
+            elif game.max_attempts > 0 and len(game.guesses) >= game.max_attempts:
                 game.status = "lost"
                 game.finished_at = timestamp
 

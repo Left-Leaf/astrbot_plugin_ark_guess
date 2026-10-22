@@ -27,7 +27,6 @@ interface RuntimeState {
   session: GameSession | null;
   stats: LocalStats;
   settings: GameSettings;
-  settingsOpen: boolean;
   notice: string;
   selectedId: string;
 }
@@ -36,7 +35,6 @@ const state: RuntimeState = {
   session: null,
   stats: defaultStats(),
   settings: defaultSettings(),
-  settingsOpen: false,
   notice: "",
   selectedId: "",
 };
@@ -170,10 +168,10 @@ function render(): void {
   const action = isPlaying
     ? `<form id="guess-form" class="guess-form" autocomplete="off"><label for="operator-search">提交干员</label><div class="search-wrap"><input id="operator-search" name="operator" type="search" placeholder="输入干员名称" aria-label="干员名称" aria-autocomplete="list" aria-controls="suggestions" /><button type="submit" aria-label="提交猜测">猜测 <span aria-hidden="true">→</span></button></div><div id="suggestions" class="suggestions" role="listbox"></div><p class="form-hint">可输入部分名称，再从候选中选择。</p></form>`
     : `<button class="start-button" id="start-game">${isFinished ? "再开一局" : "开始推演"}<span aria-hidden="true">→</span></button>${isFinished ? `<button class="quiet-button" id="clear-game">清除本局记录</button>` : ""}`;
-  const settingsPanel = `
-    <details class="settings-panel" id="settings-panel"${state.settingsOpen ? " open" : ""}>
-      <summary>游戏设置</summary>
-      <div class="settings-body">
+  const settingsDialog = `
+    <dialog class="settings-dialog" id="settings-dialog">
+      <form method="dialog" class="settings-form">
+        <div class="settings-head"><strong>游戏设置</strong><button class="settings-close" type="submit" aria-label="关闭">×</button></div>
         <div class="setting-row">
           <span class="setting-label">答案稀有度</span>
           <div class="rarity-options">
@@ -187,21 +185,21 @@ function render(): void {
           <p class="setting-hint">-1 表示不限次数；新设置从下一局开始生效。</p>
         </div>
         <p class="settings-error" id="settings-error" role="alert"></p>
-      </div>
-    </details>`;
+        <button class="settings-done" type="submit">完成</button>
+      </form>
+    </dialog>`;
 
   root.innerHTML = `
     <div class="page-shell">
       <main class="game-card">
         <header class="card-head">
           <div><p class="kicker">ARKNIGHTS · GUESS</p><h1>明日方舟 <span>猜干员</span></h1></div>
-          <div class="card-meta"><div class="meta-row"><span class="game-id">${gameCode(session)}</span>${isPlaying ? `<button class="restart-button" id="restart-game" type="button">重新开始</button>` : ""}</div><strong class="progress">${progress}</strong></div>
+          <div class="card-meta"><div class="meta-row"><span class="game-id">${gameCode(session)}</span><button class="settings-button" id="open-settings" type="button" aria-label="游戏设置">⚙<span>设置</span></button>${isPlaying ? `<button class="restart-button" id="restart-game" type="button">重新开始</button>` : ""}</div><strong class="progress">${progress}</strong></div>
         </header>
         <hr class="card-rule" />
 
         <section class="action-area">
           ${action}
-          ${settingsPanel}
           ${state.notice ? `<p class="notice" role="status">${escapeHtml(state.notice)}</p>` : ""}
         </section>
 
@@ -219,14 +217,16 @@ function render(): void {
           <span class="arrow-hint">↑ 答案更高 / 更晚　↓ 答案更低 / 更早</span>
         </div>
       </main>
+      ${settingsDialog}
       <footer class="page-footer"><span>已开始 ${state.stats.gamesPlayed} · 成功 ${state.stats.gamesWon} · 最佳连胜 ${state.stats.bestStreak}</span><span>记录保存在此浏览器</span></footer>
     </div>`;
 
   document.querySelector<HTMLButtonElement>("#start-game")?.addEventListener("click", startGame);
   document.querySelector<HTMLButtonElement>("#restart-game")?.addEventListener("click", restartGame);
-  const settingsDetails = document.querySelector<HTMLDetailsElement>("#settings-panel");
-  settingsDetails?.addEventListener("toggle", () => {
-    state.settingsOpen = settingsDetails.open;
+  const settingsDialogElement = document.querySelector<HTMLDialogElement>("#settings-dialog");
+  document.querySelector<HTMLButtonElement>("#open-settings")?.addEventListener("click", openSettings);
+  settingsDialogElement?.addEventListener("click", (event) => {
+    if (event.target === settingsDialogElement) settingsDialogElement.close();
   });
   document.querySelectorAll<HTMLInputElement>('input[name="rarity"]').forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
@@ -252,6 +252,11 @@ function render(): void {
   document.querySelector<HTMLFormElement>("#guess-form")?.addEventListener("submit", handleGuess);
   const input = document.querySelector<HTMLInputElement>("#operator-search");
   input?.addEventListener("input", () => renderSuggestions(input.value));
+}
+
+function openSettings(): void {
+  const dialog = document.querySelector<HTMLDialogElement>("#settings-dialog");
+  if (dialog && !dialog.open) dialog.showModal();
 }
 
 function readSettingsFromDom(): void {
@@ -283,22 +288,21 @@ function newSession(notice: string): void {
   const invalid = validateSettings(state.settings);
   if (invalid) {
     state.notice = invalid;
-    state.settingsOpen = true;
     render();
+    openSettings();
     return;
   }
   try {
     state.session = createGame(operators, { settings: state.settings });
   } catch (error) {
     state.notice = error instanceof Error ? error.message : "无法开始游戏。";
-    state.settingsOpen = true;
     render();
+    openSettings();
     return;
   }
   state.stats.gamesPlayed += 1;
   state.notice = notice;
   state.selectedId = "";
-  state.settingsOpen = false;
   save();
   render();
   document.querySelector<HTMLInputElement>("#operator-search")?.focus();

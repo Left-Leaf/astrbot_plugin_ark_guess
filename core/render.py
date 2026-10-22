@@ -54,6 +54,10 @@ def render_guess(record: GuessRecord, operator: Operator) -> str:
     return f"第 {record.attempt} 次：{operator.name}\n{line}"
 
 
+def _limit_text(limit: int) -> str:
+    return "不限" if limit == -1 else str(limit)
+
+
 def _answer_line(game: Game, pool: OperatorPool) -> str:
     answer = pool.by_id.get(game.answer_id)
     if answer is None:
@@ -66,7 +70,7 @@ def _answer_line(game: Game, pool: OperatorPool) -> str:
 
 def render_board(game: Game, pool: OperatorPool, history: int = 3) -> str:
     """渲染当前对局（默认只展示最近几次猜测，避免消息过长）。"""
-    lines = [f"对局 {game.id} ｜ 已猜 {len(game.guesses)}/{game.max_attempts}"]
+    lines = [f"对局 {game.id} ｜ 已猜 {len(game.guesses)}/{_limit_text(game.max_attempts)}"]
 
     records = game.guesses[-history:] if history > 0 else game.guesses
     for record in records:
@@ -78,6 +82,8 @@ def render_board(game: Game, pool: OperatorPool, history: int = 3) -> str:
         lines.append(f"🎉 猜中了！{_answer_line(game, pool)}")
     elif game.status == "lost":
         lines.append(f"❌ 次数用尽。{_answer_line(game, pool)}")
+    elif game.max_attempts == -1:
+        lines.append("次数不限，艾特机器人并发送干员名继续")
     else:
         lines.append(
             f"还剩 {game.max_attempts - len(game.guesses)} 次机会，艾特机器人并发送干员名继续"
@@ -90,9 +96,10 @@ def render_new_game(game: Game, pool: OperatorPool) -> str:
     """新对局开场提示。"""
     answer = pool.by_id.get(game.answer_id)
     pool_hint = f"{len(pool.operators)} 名干员" if answer else "题库"
+    attempts_text = "次数不限" if game.max_attempts == -1 else f"共 {game.max_attempts} 次机会"
     return (
         f"🎮 新对局已创建：{game.id}\n"
-        f"本群共 {game.max_attempts} 次机会，从 {pool_hint} 中猜出答案。\n"
+        f"本群{attempts_text}，从 {pool_hint} 中猜出答案。\n"
         "艾特机器人并发送干员名进行猜测；输入 不猜了 结束本局。\n"
         "图例：🟩 正确 ｜ 🟨 隐藏势力命中 ｜ ⬜ 错误 ｜ ⬆️ 答案更高/更晚 ｜ ⬇️ 答案更低/更早"
     )
@@ -106,6 +113,10 @@ def render_help(prefix: str = "/") -> str:
         "粥一把 <干员名>             可裸发或@机器人开局并猜测\n"
         "@机器人 <干员名>            提交猜测（需先开始对局）\n"
         f"{prefix}查干员 <关键词>    检索干员资料，不影响对局\n"
+        f"{prefix}角色池设置 <数字串>  例：{prefix}角色池设置 1256（只填 1-6）\n"
+        f"{prefix}猜测次数 <次数>     例：{prefix}猜测次数 8；-1 表示不限\n"
+        f"{prefix}本群难度             查看本群难度\n"
+        f"{prefix}重置难度             恢复默认难度\n"
         "不猜了                      结束当前对局（无对局时静默）\n"
         f"{prefix}对局状态           查看当前对局\n"
         f"{prefix}对局统计           查看本进程对局数量\n"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -139,18 +140,30 @@ class OperatorPool:
         fuzzy.sort(key=lambda item: (item[0], item[1].name))
         return [operator for _, operator in fuzzy[:limit]]
 
-    def candidates(self, min_rarity: int = 1) -> list[Operator]:
-        """按最低稀有度过滤后的出题候选。"""
-        return [operator for operator in self.operators if operator.rarity >= min_rarity]
+    def candidates(
+        self,
+        min_rarity: int = 1,
+        rarities: Collection[int] | None = None,
+    ) -> list[Operator]:
+        """按最低稀有度和可选稀有度集合过滤后的出题候选。"""
+        if rarities is not None and not rarities:
+            return []
+        return [
+            operator
+            for operator in self.operators
+            if operator.rarity >= min_rarity
+            and (rarities is None or operator.rarity in rarities)
+        ]
 
     def random_operator(
         self,
         rng: random.Random | None = None,
         min_rarity: int = 1,
+        rarities: Collection[int] | None = None,
     ) -> Operator:
-        candidates = self.candidates(min_rarity)
+        candidates = self.candidates(min_rarity, rarities)
         if not candidates:
-            raise EmptyPoolError(f"没有稀有度 >= {min_rarity} 的干员可用于出题")
+            raise EmptyPoolError("当前稀有度设置下没有可用于出题的干员")
         return (rng or random).choice(candidates)
 
 

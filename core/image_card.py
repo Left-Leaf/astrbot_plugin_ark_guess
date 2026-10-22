@@ -241,6 +241,8 @@ def _status(game: Game, pool: OperatorPool) -> tuple[str, str]:
         )
         prefix = "猜中了！答案是" if game.status == "won" else "次数用尽，答案是"
         return f"{prefix} {detail}", game.status
+    if game.max_attempts == -1:
+        return "次数不限 · 艾特机器人并发送干员名继续", "playing"
     remaining = game.max_attempts - len(game.guesses)
     return f"还剩 {remaining} 次机会 · 艾特机器人并发送干员名继续", "playing"
 
@@ -316,7 +318,7 @@ def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -
     draw.text((right, y + 2 * SCALE), game.id, font=meta_font, fill=MUTED, anchor="ra")
     draw.text(
         (right, y + 18 * SCALE),
-        f"{len(game.guesses)} / {game.max_attempts}",
+        f"{len(game.guesses)} / {'∞' if game.max_attempts == -1 else game.max_attempts}",
         font=progress_font,
         fill=TEXT,
         anchor="ra",

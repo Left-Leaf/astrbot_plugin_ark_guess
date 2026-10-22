@@ -1,6 +1,6 @@
 {
   "max_attempts": {
-    "description": "每局最大猜测次数",
+    "description": "默认最大猜测次数；-1 表示不限次数（可按群覆盖）",
     "type": "int",
     "default": 8
   },
@@ -15,7 +15,7 @@
     "default": 600
   },
   "min_rarity": {
-    "description": "出题池最低稀有度（1-6）",
+    "description": "默认答案池最低稀有度（1-6，可按群覆盖）",
     "type": "int",
     "default": 1
   },

@@ -54,8 +54,9 @@ h1 span { color: var(--accent); }
 .card-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 2px; }
 .meta-row { display: flex; align-items: center; gap: 8px; }
 .game-id { max-width: 120px; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 11px; letter-spacing: .4px; text-overflow: ellipsis; white-space: nowrap; }
-.restart-button { flex-shrink: 0; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: transparent; font-size: 10px; line-height: 1.3; }
-.restart-button:hover { border-color: var(--accent); color: var(--accent); background: rgba(245, 158, 11, .08); }
+.restart-button, .settings-button { flex-shrink: 0; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: transparent; font-size: 10px; line-height: 1.3; }
+.restart-button:hover, .settings-button:hover { border-color: var(--accent); color: var(--accent); background: rgba(245, 158, 11, .08); }
+.settings-button { display: inline-flex; align-items: center; gap: 3px; }
 .progress { color: var(--ink); font-family: var(--mono); font-size: 24px; font-weight: 500; line-height: 1; }
 .card-rule { margin: 22px 0 0; border: 0; border-top: 1px solid var(--line); }
 
@@ -82,12 +83,13 @@ h1 span { color: var(--accent); }
 .notice { margin: 12px 0 0; padding: 10px 12px; border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; color: #fde68a; background: rgba(74, 58, 10, .62); font-size: 11px; line-height: 1.6; }
 .quiet-button { margin-top: 10px; padding: 6px 0; border: 0; color: var(--muted); background: transparent; font-size: 11px; text-decoration: underline; text-decoration-color: #475569; text-underline-offset: 3px; }
 
-.settings-panel { margin-top: 12px; border-top: 1px solid var(--line); }
-.settings-panel summary { padding-top: 10px; color: var(--muted); font-size: 11px; cursor: pointer; list-style: none; }
-.settings-panel summary::-webkit-details-marker { display: none; }
-.settings-panel summary::before { margin-right: 6px; color: var(--faint); content: "⚙"; }
-.settings-panel[open] summary { color: var(--ink); }
-.settings-body { display: flex; flex-direction: column; gap: 9px; padding: 10px 0 2px; }
+.settings-dialog { width: min(380px, calc(100% - 24px)); max-height: calc(100% - 32px); padding: 0; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: linear-gradient(180deg, #0f1729, #111c2f); box-shadow: 0 24px 70px rgba(2, 6, 23, .65); }
+.settings-dialog::backdrop { background: rgba(2, 6, 23, .72); backdrop-filter: blur(2px); }
+.settings-form { display: flex; flex-direction: column; gap: 12px; padding: 18px; }
+.settings-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 700; }
+.settings-close { padding: 0 2px; border: 0; color: var(--muted); background: transparent; font-size: 20px; line-height: 1; }
+.settings-done { height: 38px; border: 0; border-radius: 8px; color: #111827; background: var(--accent); font-size: 12px; font-weight: 800; }
+.settings-done:hover { background: #fbbf24; }
 .setting-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .setting-label { flex-basis: 100%; color: var(--muted); font-size: 10px; }
 .rarity-options { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -145,8 +147,11 @@ h1 span { color: var(--accent); }
   .kicker { margin-bottom: 7px; font-size: 8px; letter-spacing: 1px; }
   h1 { font-size: clamp(19px, 6vw, 23px); white-space: nowrap; }
   .meta-row { gap: 6px; }
-  .game-id { max-width: 72px; font-size: 9px; }
-  .restart-button { padding: 2px 6px; font-size: 8px; }
+  .game-id { max-width: 48px; font-size: 9px; }
+  .restart-button, .settings-button { padding: 2px 6px; font-size: 8px; }
+  .settings-button span { display: none; }
+  .settings-dialog { width: calc(100% - 20px); }
+  .settings-form { gap: 10px; padding: 16px; }
   .progress { font-size: 19px; }
   .card-rule { margin-top: 16px; }
   .action-area { padding: 12px 0 14px; }
@@ -156,8 +161,6 @@ h1 span { color: var(--accent); }
   .search-wrap input { padding: 0 10px; font-size: 12px; }
   .search-wrap button { padding: 0 12px; font-size: 11px; }
   .form-hint { font-size: 9px; }
-  .settings-panel { margin-top: 10px; }
-  .settings-panel summary { padding-top: 9px; font-size: 10px; }
   .rarity-option { padding: 3px 6px; font-size: 9px; }
   .settings-number { height: 30px; font-size: 11px; }
   .setting-hint { font-size: 8px; }
