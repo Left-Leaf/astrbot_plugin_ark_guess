@@ -209,7 +209,7 @@ function startGame(): void {
 
 function restartGame(): void {
   if (!window.confirm("重开本局？当前猜测进度将被清除。")) return;
-  newSession("已重开本局。");
+  newSession("");
 }
 
 function renderSuggestions(query: string): void {
