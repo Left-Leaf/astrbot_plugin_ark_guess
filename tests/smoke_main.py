@@ -103,21 +103,27 @@ async def main() -> None:
     if plugin.registry.current_game(plugin._session_key(event)) is not None:
         raise AssertionError("裸文本猜干员不应开局")
 
-    print("\n--- @机器人 猜干员（开局）---")
+    print("\n--- @机器人 猜干员（缺名字，不应开局）---")
     event.set_mention("猜干员")
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
+    if plugin.registry.current_game(plugin._session_key(event)) is not None:
+        raise AssertionError("猜干员缺少参数时不应开局")
 
-    game = plugin.registry.current_game(plugin._session_key(event))
-    if game is None or game.guesses:
-        raise AssertionError("裸指令开局不应提交猜测")
-
-    print("\n--- @机器人 阿米娅（提交猜测）---")
-    event.set_mention("阿米娅")
+    print("\n--- @机器人 猜干员 阿米娅（带参开局）---")
+    event.set_mention("猜干员 阿米娅")
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
-    if len(game.guesses) != 1:
-        raise AssertionError("@机器人+干员名应提交一次猜测")
+    game = plugin.registry.current_game(plugin._session_key(event))
+    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
+        raise AssertionError("猜干员带参应以指定干员作为首猜")
+
+    print("\n--- @机器人 能天使（提交第二次猜测）---")
+    event.set_mention("能天使")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    if len(game.guesses) != 2:
+        raise AssertionError("@机器人+干员名应追加一次猜测")
 
     print("\n--- 玛一把（已有对局别名）---")
     event.set_plain("玛一把")
@@ -165,10 +171,27 @@ async def main() -> None:
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))
 
-    print("\n--- 粥一把（裸别名重新开局）---")
+    print("\n--- 粥一把（缺名字，不应开局）---")
     event.set_plain("粥一把")
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
+    if plugin.registry.current_game(plugin._session_key(event)) is not None:
+        raise AssertionError("粥一把缺少参数时不应开局")
+
+    print("\n--- @机器人 粥一把（缺名字，不应开局）---")
+    event.set_mention("粥一把")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    if plugin.registry.current_game(plugin._session_key(event)) is not None:
+        raise AssertionError("@机器人 粥一把缺少参数时不应开局")
+
+    print("\n--- 粥一把 阿米娅（裸发带参开局）---")
+    event.set_plain("粥一把 阿米娅")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    game = plugin.registry.current_game(plugin._session_key(event))
+    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
+        raise AssertionError("裸发粥一把带参应以指定干员作为首猜")
 
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))

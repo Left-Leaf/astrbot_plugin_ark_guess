@@ -22,18 +22,17 @@ from .core import (
     load_operator_pool,
     render_board,
     render_help,
-    render_new_game,
 )
 from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.3.3"
-START_TRIGGERS = frozenset({"猜干员", "玛一把", "粥一把"})
+VERSION = "1.3.4"
 BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
 MALYANAR_START_TRIGGER = "玛一把"
 MALYANAR_NAME = "玛恩纳"
 QUICK_GUESS_START_TRIGGER = "粥一把"
+MAIN_START_TRIGGER = "猜干员"
 END_TRIGGER = "不猜了"
 
 
@@ -60,10 +59,23 @@ def _mentioned_text(event: AstrMessageEvent) -> str | None:
     return query if mentioned and query else None
 
 
+def _command_argument(text: str | None, command: str) -> str | None:
+    if text == command:
+        return ""
+    if text and text.startswith(command) and len(text) > len(command):
+        if text[len(command)].isspace():
+            return text[len(command) :].strip()
+    return None
+
+
 class _GameTriggerFilter(CustomFilter):
     def filter(self, event: AstrMessageEvent, cfg) -> bool:
         plain_text = _plain_message_text(event)
-        if plain_text in BARE_START_ALIASES or plain_text == END_TRIGGER:
+        if (
+            plain_text in BARE_START_ALIASES
+            or _command_argument(plain_text, QUICK_GUESS_START_TRIGGER) is not None
+            or plain_text == END_TRIGGER
+        ):
             return True
         return _mentioned_text(event) is not None
 
@@ -115,38 +127,54 @@ class ArkGuessPlugin(Star):
         plain_text = _plain_message_text(event)
         mentioned_text = _mentioned_text(event)
         session_key = self._session_key(event)
-        mentioned_quick_guess = None
-        quick_guess_prefix = f"{QUICK_GUESS_START_TRIGGER} "
-        if mentioned_text and mentioned_text.startswith(quick_guess_prefix):
-            mentioned_quick_guess = mentioned_text[len(quick_guess_prefix) :].strip()
+        mentioned_main_guess = _command_argument(mentioned_text, MAIN_START_TRIGGER)
+        mentioned_quick_guess = _command_argument(mentioned_text, QUICK_GUESS_START_TRIGGER)
+        bare_quick_guess = _command_argument(plain_text, QUICK_GUESS_START_TRIGGER)
+        main_start = mentioned_main_guess is not None
+        quick_start = (
+            plain_text == QUICK_GUESS_START_TRIGGER
+            or mentioned_text == QUICK_GUESS_START_TRIGGER
+            or bare_quick_guess is not None
+            or mentioned_quick_guess is not None
+        )
 
         if (
             plain_text in BARE_START_ALIASES
-            or mentioned_text in START_TRIGGERS
-            or mentioned_quick_guess
+            or mentioned_text == MALYANAR_START_TRIGGER
+            or main_start
+            or quick_start
         ):
             starts_with_mlynar = (
                 plain_text == MALYANAR_START_TRIGGER
                 or mentioned_text == MALYANAR_START_TRIGGER
             )
+            guess_name = (
+                MALYANAR_NAME
+                if starts_with_mlynar
+                else mentioned_main_guess
+                if main_start
+                else mentioned_quick_guess
+                if mentioned_quick_guess is not None
+                else bare_quick_guess
+            )
             self._ensure_cleanup_task()
             try:
+                if not guess_name:
+                    yield event.plain_result(
+                        "开局需要干员名称。请发送 @机器人 猜干员 <干员名> "
+                        "或 粥一把 <干员名>。"
+                    )
+                    event.stop_event()
+                    return
                 current = self.registry.current_game(session_key)
                 if current is not None and current.playing:
                     yield event.plain_result(f"当前群已有进行中的对局：{current.id}")
                     yield await self._respond_board(event, current)
                     return
-                if mentioned_quick_guess:
-                    self.pool.resolve(mentioned_quick_guess)
-                game, _ = self.registry.start_or_get(session_key)
-                if starts_with_mlynar:
-                    outcome = await self.registry.submit(session_key, MALYANAR_NAME)
-                    yield await self._respond_board(event, outcome.game)
-                elif mentioned_quick_guess:
-                    outcome = await self.registry.submit(session_key, mentioned_quick_guess)
-                    yield await self._respond_board(event, outcome.game)
-                else:
-                    yield await self._respond(event, render_new_game(game, self.pool))
+                self.pool.resolve(guess_name)
+                self.registry.start_or_get(session_key)
+                outcome = await self.registry.submit(session_key, guess_name)
+                yield await self._respond_board(event, outcome.game)
             except ArkGuessError as exc:
                 yield event.plain_result(self._error_text(exc))
             except Exception:
