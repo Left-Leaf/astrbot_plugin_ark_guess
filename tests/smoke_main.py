@@ -142,8 +142,9 @@ async def main() -> None:
     event.set_plain("玛一把")
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
-    if plugin.registry.current_game(plugin._session_key(event)) is None:
-        raise AssertionError("玛一把别名应可裸文本开局")
+    game = plugin.registry.current_game(plugin._session_key(event))
+    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "玛恩纳":
+        raise AssertionError("裸发玛一把应以玛恩纳作为第一次猜测")
 
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))
@@ -152,8 +153,9 @@ async def main() -> None:
     event.set_mention("玛一把")
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
-    if plugin.registry.current_game(plugin._session_key(event)) is None:
-        raise AssertionError("@机器人+玛一把应可开局")
+    game = plugin.registry.current_game(plugin._session_key(event))
+    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "玛恩纳":
+        raise AssertionError("@机器人+玛一把应以玛恩纳作为第一次猜测")
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))
 

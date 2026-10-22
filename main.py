@@ -28,9 +28,11 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 START_TRIGGERS = frozenset({"猜干员", "玛一把", "粥一把"})
 BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
+MALYANAR_START_TRIGGER = "玛一把"
+MALYANAR_NAME = "玛恩纳"
 END_TRIGGER = "不猜了"
 
 
@@ -114,6 +116,10 @@ class ArkGuessPlugin(Star):
         session_key = self._session_key(event)
 
         if plain_text in BARE_START_ALIASES or mentioned_text in START_TRIGGERS:
+            starts_with_mlynar = (
+                plain_text == MALYANAR_START_TRIGGER
+                or mentioned_text == MALYANAR_START_TRIGGER
+            )
             self._ensure_cleanup_task()
             try:
                 current = self.registry.current_game(session_key)
@@ -122,7 +128,11 @@ class ArkGuessPlugin(Star):
                     yield await self._respond_board(event, current)
                     return
                 game, _ = self.registry.start_or_get(session_key)
-                yield await self._respond(event, render_new_game(game, self.pool))
+                if starts_with_mlynar:
+                    outcome = await self.registry.submit(session_key, MALYANAR_NAME)
+                    yield await self._respond_board(event, outcome.game)
+                else:
+                    yield await self._respond(event, render_new_game(game, self.pool))
             except ArkGuessError as exc:
                 yield event.plain_result(self._error_text(exc))
             except Exception:
