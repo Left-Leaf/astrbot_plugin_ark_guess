@@ -117,8 +117,8 @@ h1 span { color: var(--accent); }
 @keyframes rise-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (max-width: 620px) {
-  .page-shell { width: calc(100% - 24px); padding: 18px 0 12px; }
-  .game-card { padding: 20px 14px 16px; border-radius: 14px; }
+  .page-shell { width: calc(100% - 12px); padding: 18px 0 12px; }
+  .game-card { padding: 18px 8px 14px; border-radius: 14px; }
   .card-head { gap: 10px; }
   .kicker { margin-bottom: 7px; font-size: 8px; letter-spacing: 1px; }
   h1 { font-size: 23px; }
@@ -133,16 +133,16 @@ h1 span { color: var(--accent); }
   .search-wrap button { padding: 0 12px; font-size: 11px; }
   .form-hint { font-size: 9px; }
 
-  .board-labels, .guess-row { grid-template-columns: minmax(48px, 66px) 0.72fr 1.05fr 1.35fr 1.15fr 0.8fr; gap: 3px; }
-  .board-labels { min-height: 30px; font-size: 7px; }
+  .board-labels, .guess-row { grid-template-columns: 56px repeat(5, minmax(0, 1fr)); gap: 3px; }
+  .board-labels { min-height: 30px; font-size: clamp(5.8px, 1.5vw, 7px); }
   .guess-list { gap: 5px; padding-bottom: 12px; }
   .guess-row { min-height: 54px; }
   .guess-identity { gap: 1px; }
   .guess-identity strong { font-size: 9px; }
   .guess-identity span { font-size: 6px; }
-  .result-cell { gap: 1px; padding: 3px 1px; border-width: 1px; border-radius: 7px; }
-  .cell-main { display: -webkit-box; overflow: hidden; font-size: 7px; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-  .cell-sub { font-size: 5px; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; }
+  .result-cell { gap: 1px; padding: 3px 0; border-width: 1px; border-radius: 7px; }
+  .cell-main { display: block; overflow: hidden; font-size: clamp(5.3px, 1.7vw, 7px); line-height: 1.2; white-space: nowrap; text-overflow: ellipsis; }
+  .cell-sub { display: block; overflow: hidden; font-size: clamp(4.2px, 1.15vw, 5px); line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; }
 
   .empty-board { min-height: 84px; font-size: 11px; }
   .status-bar { padding: 11px 12px; border-radius: 9px; font-size: 11px; }
