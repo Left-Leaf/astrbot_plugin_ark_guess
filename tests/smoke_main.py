@@ -170,6 +170,17 @@ async def main() -> None:
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
 
+    event.set_plain("不猜了")
+    await collect(plugin.group_game_trigger(event))
+
+    print("\n--- @机器人 粥一把 阿米娅（带参开局并猜测）---")
+    event.set_mention("粥一把 阿米娅")
+    for result in await collect(plugin.group_game_trigger(event)):
+        show(result)
+    game = plugin.registry.current_game(plugin._session_key(event))
+    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
+        raise AssertionError("@机器人 粥一把 干员名应以该干员作为首猜")
+
     await plugin.terminate()
 
 

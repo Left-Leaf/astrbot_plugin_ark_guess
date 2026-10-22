@@ -28,11 +28,12 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 START_TRIGGERS = frozenset({"猜干员", "玛一把", "粥一把"})
 BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
 MALYANAR_START_TRIGGER = "玛一把"
 MALYANAR_NAME = "玛恩纳"
+QUICK_GUESS_START_TRIGGER = "粥一把"
 END_TRIGGER = "不猜了"
 
 
@@ -114,8 +115,16 @@ class ArkGuessPlugin(Star):
         plain_text = _plain_message_text(event)
         mentioned_text = _mentioned_text(event)
         session_key = self._session_key(event)
+        mentioned_quick_guess = None
+        quick_guess_prefix = f"{QUICK_GUESS_START_TRIGGER} "
+        if mentioned_text and mentioned_text.startswith(quick_guess_prefix):
+            mentioned_quick_guess = mentioned_text[len(quick_guess_prefix) :].strip()
 
-        if plain_text in BARE_START_ALIASES or mentioned_text in START_TRIGGERS:
+        if (
+            plain_text in BARE_START_ALIASES
+            or mentioned_text in START_TRIGGERS
+            or mentioned_quick_guess
+        ):
             starts_with_mlynar = (
                 plain_text == MALYANAR_START_TRIGGER
                 or mentioned_text == MALYANAR_START_TRIGGER
@@ -127,9 +136,14 @@ class ArkGuessPlugin(Star):
                     yield event.plain_result(f"当前群已有进行中的对局：{current.id}")
                     yield await self._respond_board(event, current)
                     return
+                if mentioned_quick_guess:
+                    self.pool.resolve(mentioned_quick_guess)
                 game, _ = self.registry.start_or_get(session_key)
                 if starts_with_mlynar:
                     outcome = await self.registry.submit(session_key, MALYANAR_NAME)
+                    yield await self._respond_board(event, outcome.game)
+                elif mentioned_quick_guess:
+                    outcome = await self.registry.submit(session_key, mentioned_quick_guess)
                     yield await self._respond_board(event, outcome.game)
                 else:
                     yield await self._respond(event, render_new_game(game, self.pool))
