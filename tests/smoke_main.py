@@ -77,7 +77,14 @@ async def main() -> None:
     game = plugin.registry.current_game(plugin._session_key(event))
     guesses_before_search = len(game.guesses) if game is not None else 0
     print("\n--- /查干员 阿米（检索不应影响对局）---")
-    for result in await collect(plugin.ark_search(event, "阿米")):
+    search_results = await collect(plugin.ark_search(event, "阿米"))
+    search_text = search_results[0]["text"]
+    expected_names = "\n".join(
+        operator.name for operator in plugin.pool.search("阿米", limit=10)
+    )
+    if search_text != expected_names:
+        raise AssertionError("检索结果应只包含干员名称")
+    for result in search_results:
         show(result)
     game_after_search = plugin.registry.current_game(plugin._session_key(event))
     if game_after_search is None or len(game_after_search.guesses) != guesses_before_search:

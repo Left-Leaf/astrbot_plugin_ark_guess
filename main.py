@@ -26,7 +26,7 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 
 def _as_int(value: object, default: int) -> int:
@@ -144,23 +144,7 @@ class ArkGuessPlugin(Star):
                 yield event.plain_result(f"没有找到与「{query}」相近的干员。")
                 return
 
-            compact = "".join(query.casefold().split())
-            approximate = not any(
-                compact in "".join(operator.name.casefold().split())
-                or compact in operator.id.casefold()
-                for operator in matches
-            )
-            heading = "未找到直接匹配，近似候选" if approximate else "检索结果"
-            lines = [f"{heading}（仅检索，不计入猜测）："]
-            for index, operator in enumerate(matches[:10], start=1):
-                lines.append(
-                    f"{index}. {operator.name}｜{operator.rarity}★ "
-                    f"{operator.profession}/{operator.subclass}｜"
-                    f"{operator.faction.replace(',', '、')}｜{operator.release_year}年"
-                )
-            if len(matches) > 10:
-                lines.append("候选较多，仅显示前 10 名；请补充更具体的关键词。")
-            yield event.plain_result("\n".join(lines))
+            yield event.plain_result("\n".join(operator.name for operator in matches[:10]))
         finally:
             event.stop_event()
 
