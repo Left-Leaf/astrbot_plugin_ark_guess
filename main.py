@@ -26,7 +26,7 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 
 
 def _as_int(value: object, default: int) -> int:

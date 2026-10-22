@@ -21,9 +21,9 @@ def _number_cell(value: int, state: str) -> str:
     return f"{value} {GREY}{arrow}"
 
 
-def _subclass_cell(subclass: str, state: str) -> str:
+def _subclass_cell(profession: str, subclass: str, state: str) -> str:
     tone = {"correct": GREEN, "close": YELLOW}.get(state, GREY)
-    return f"{subclass} {tone}"
+    return f"{profession}/{subclass} {tone}"
 
 
 def _faction_cell(operator: Operator, state: str) -> str:
@@ -45,7 +45,7 @@ def render_guess(record: GuessRecord, operator: Operator) -> str:
     line = _SEPARATOR.join(
         [
             f"稀有度 {_number_cell(operator.rarity, result.rarity)}",
-            f"分支 {_subclass_cell(operator.subclass, result.subclass)}",
+            f"职业/分支 {_subclass_cell(operator.profession, operator.subclass, result.subclass)}",
             f"阵营 {_faction_cell(operator, result.faction)}",
             f"种族 {_race_cell(operator.race, result.race)}",
             f"实装 {_number_cell(operator.release_year, result.release_year)}",

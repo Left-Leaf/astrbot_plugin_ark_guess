@@ -239,6 +239,7 @@ class RenderTests(unittest.TestCase):
         text = render_board(game, registry.pool)
         self.assertIn("🟨", text)
         self.assertIn("隐藏：罗德岛", text)
+        self.assertIn("辅助/凝滞师", text)
 
 
 class ImageRenderTests(unittest.TestCase):

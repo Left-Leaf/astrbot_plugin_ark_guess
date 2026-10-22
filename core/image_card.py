@@ -43,7 +43,7 @@ WRONG_BG = (70, 24, 28, 255)
 WRONG_BORDER = (239, 68, 68, 255)
 WRONG_TEXT = (254, 202, 202)
 
-LABELS = ("稀有度", "分支", "阵营", "种族", "实装")
+LABELS = ("稀有度", "职业 / 分支", "阵营", "种族", "实装")
 
 _FONT_CANDIDATES = {
     False: (
@@ -362,7 +362,11 @@ def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -
 
         values = (
             (str(operator.rarity), record.result.rarity, ""),
-            (operator.subclass, record.result.subclass, ""),
+            (
+                operator.subclass,
+                record.result.subclass,
+                f"职业：{operator.profession}",
+            ),
             (operator.faction.replace(",", "、"), record.result.faction, hidden_sub),
             (operator.race, record.result.race, ""),
             (str(operator.release_year), record.result.release_year, ""),
