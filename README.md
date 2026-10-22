@@ -33,7 +33,7 @@ AstrBot 的《明日方舟》猜干员插件。基于 PRTS 干员数据（434 �
 
 首次启用时，在仓库 Settings → Pages → Build and deployment 中将 Source 设为 **GitHub Actions**。若首次运行在 `Configure GitHub Pages` 步骤失败，说明 Pages 尚未启用；启用后在 Actions 页重新运行该工作流即可。
 
-网页对局、胜场与连胜记录保存在当前浏览器的 `localStorage`；不创建账号、不上传记录，也不会与 AstrBot 群聊对局同步。清除浏览器站点数据会删除本机进度。
+网页对局、胜场与连胜记录保存在当前浏览器的 `localStorage`；不创建账号、不上传记录，也不会与 AstrBot 群聊对局同步。清除浏览器站点数据会删除本机进度。对局中可点击“重新开始”换一局，结束后可点击“再开一局”。
 
 本地开发需要 Node.js 22 或更高版本：
 

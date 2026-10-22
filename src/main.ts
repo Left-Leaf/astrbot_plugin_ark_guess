@@ -154,7 +154,7 @@ function render(): void {
       <main class="game-card">
         <header class="card-head">
           <div><p class="kicker">ARKNIGHTS · GUESS</p><h1>明日方舟 <span>猜干员</span></h1></div>
-          <div class="card-meta"><span class="game-id">${gameCode(session)}</span><strong class="progress">${progress}</strong></div>
+          <div class="card-meta"><div class="meta-row"><span class="game-id">${gameCode(session)}</span>${isPlaying ? `<button class="restart-button" id="restart-game" type="button">重新开始</button>` : ""}</div><strong class="progress">${progress}</strong></div>
         </header>
         <hr class="card-rule" />
 
@@ -177,10 +177,11 @@ function render(): void {
           <span class="arrow-hint">↑ 答案更高 / 更晚　↓ 答案更低 / 更早</span>
         </div>
       </main>
-      <footer class="page-footer"><span>已完成 ${state.stats.gamesPlayed} · 成功 ${state.stats.gamesWon} · 最佳连胜 ${state.stats.bestStreak}</span><span>记录保存在此浏览器</span></footer>
+      <footer class="page-footer"><span>已开始 ${state.stats.gamesPlayed} · 成功 ${state.stats.gamesWon} · 最佳连胜 ${state.stats.bestStreak}</span><span>记录保存在此浏览器</span></footer>
     </div>`;
 
   document.querySelector<HTMLButtonElement>("#start-game")?.addEventListener("click", startGame);
+  document.querySelector<HTMLButtonElement>("#restart-game")?.addEventListener("click", restartGame);
   document.querySelector<HTMLButtonElement>("#clear-game")?.addEventListener("click", () => {
     state.session = null;
     state.notice = "本局记录已清除。";
@@ -192,14 +193,23 @@ function render(): void {
   input?.addEventListener("input", () => renderSuggestions(input.value));
 }
 
-function startGame(): void {
+function newSession(notice: string): void {
   state.session = createGame(operators);
   state.stats.gamesPlayed += 1;
-  state.notice = "";
+  state.notice = notice;
   state.selectedId = "";
   save();
   render();
   document.querySelector<HTMLInputElement>("#operator-search")?.focus();
+}
+
+function startGame(): void {
+  newSession("");
+}
+
+function restartGame(): void {
+  if (!window.confirm("重开本局？当前猜测进度将被清除。")) return;
+  newSession("已重开本局。");
 }
 
 function renderSuggestions(query: string): void {

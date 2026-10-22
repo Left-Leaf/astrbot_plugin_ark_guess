@@ -47,11 +47,15 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 }
 
 .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.card-head > div:first-child { min-width: 0; }
 .kicker { margin: 0 0 10px; color: var(--faint); font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; }
 h1 { margin: 0; font-size: 30px; line-height: 1.1; font-weight: 800; letter-spacing: .5px; }
 h1 span { color: var(--accent); }
 .card-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 2px; }
-.game-id { color: var(--muted); font-family: var(--mono); font-size: 11px; letter-spacing: .4px; }
+.meta-row { display: flex; align-items: center; gap: 8px; }
+.game-id { max-width: 120px; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: 11px; letter-spacing: .4px; text-overflow: ellipsis; white-space: nowrap; }
+.restart-button { flex-shrink: 0; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: transparent; font-size: 10px; line-height: 1.3; }
+.restart-button:hover { border-color: var(--accent); color: var(--accent); background: rgba(245, 158, 11, .08); }
 .progress { color: var(--ink); font-family: var(--mono); font-size: 24px; font-weight: 500; line-height: 1; }
 .card-rule { margin: 22px 0 0; border: 0; border-top: 1px solid var(--line); }
 
@@ -121,8 +125,10 @@ h1 span { color: var(--accent); }
   .game-card { padding: 18px 8px 14px; border-radius: 14px; }
   .card-head { gap: 10px; }
   .kicker { margin-bottom: 7px; font-size: 8px; letter-spacing: 1px; }
-  h1 { font-size: 23px; }
-  .game-id { font-size: 9px; }
+  h1 { font-size: clamp(19px, 6vw, 23px); white-space: nowrap; }
+  .meta-row { gap: 6px; }
+  .game-id { max-width: 72px; font-size: 9px; }
+  .restart-button { padding: 2px 6px; font-size: 8px; }
   .progress { font-size: 19px; }
   .card-rule { margin-top: 16px; }
   .action-area { padding: 12px 0 14px; }
@@ -141,8 +147,8 @@ h1 span { color: var(--accent); }
   .guess-identity strong { font-size: 9px; }
   .guess-identity span { font-size: 6px; }
   .result-cell { gap: 1px; padding: 3px 0; border-width: 1px; border-radius: 7px; }
-  .cell-main { display: block; overflow: hidden; font-size: clamp(5.3px, 1.7vw, 7px); line-height: 1.2; white-space: nowrap; text-overflow: ellipsis; }
-  .cell-sub { display: block; overflow: hidden; font-size: clamp(4.2px, 1.15vw, 5px); line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; }
+  .cell-main { display: block; overflow: hidden; font-size: clamp(5.3px, 1.7vw, 7px); line-height: 1.15; white-space: normal; overflow-wrap: anywhere; text-align: center; text-overflow: clip; }
+  .cell-sub { display: block; overflow: hidden; font-size: clamp(4.2px, 1.15vw, 5px); line-height: 1.15; white-space: normal; overflow-wrap: anywhere; text-align: center; text-overflow: clip; }
 
   .empty-board { min-height: 84px; font-size: 11px; }
   .status-bar { padding: 11px 12px; border-radius: 9px; font-size: 11px; }
