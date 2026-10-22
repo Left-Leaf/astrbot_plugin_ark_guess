@@ -1,11 +1,15 @@
 import dataset from "../data/operators.json";
 import {
   createGame,
+  defaultSettings,
   defaultStats,
-  MAX_ATTEMPTS,
+  normalizeSettings,
+  RARITIES,
   searchOperators,
   STORAGE_KEY,
   submitGuess,
+  validateSettings,
+  type GameSettings,
   type GameSession,
   type LocalStats,
   type Operator,
@@ -22,6 +26,8 @@ const root = appRoot as HTMLDivElement;
 interface RuntimeState {
   session: GameSession | null;
   stats: LocalStats;
+  settings: GameSettings;
+  settingsOpen: boolean;
   notice: string;
   selectedId: string;
 }
@@ -29,6 +35,8 @@ interface RuntimeState {
 const state: RuntimeState = {
   session: null,
   stats: defaultStats(),
+  settings: defaultSettings(),
+  settingsOpen: false,
   notice: "",
   selectedId: "",
 };
@@ -40,6 +48,7 @@ function loadSavedData(): void {
     const saved = JSON.parse(raw) as SavedGameData;
     if (saved.version !== 1) return;
     state.stats = { ...defaultStats(), ...saved.stats };
+    state.settings = normalizeSettings(saved.settings);
     if (saved.session && operatorsById.has(saved.session.answerId)) {
       state.session = saved.session;
     }
@@ -49,7 +58,12 @@ function loadSavedData(): void {
 }
 
 function save(): void {
-  const payload: SavedGameData = { version: 1, session: state.session, stats: state.stats };
+  const payload: SavedGameData = {
+    version: 1,
+    session: state.session,
+    stats: state.stats,
+    settings: state.settings,
+  };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
@@ -116,6 +130,10 @@ function renderRows(session: GameSession | null): string {
   }).join("");
 }
 
+function formatLimit(limit: number): string {
+  return limit === -1 ? "∞" : String(limit);
+}
+
 function statusInfo(session: GameSession | null): { text: string; kind: "playing" | "won" | "lost" } {
   if (!session) return { text: "选择一名干员，开始本局推演。", kind: "playing" };
   if (session.status === "won") {
@@ -127,6 +145,9 @@ function statusInfo(session: GameSession | null): { text: string; kind: "playing
     const answer = operatorsById.get(session.answerId);
     const detail = answer ? `${answer.name}（${answer.rarity}★ ${answer.profession}/${answer.subclass}）` : "未知";
     return { text: `次数用尽，答案是 ${detail}`, kind: "lost" };
+  }
+  if (session.maxAttempts === -1) {
+    return { text: "次数不限 · 输入干员名继续", kind: "playing" };
   }
   return {
     text: `还剩 ${session.maxAttempts - session.guesses.length} 次机会 · 输入干员名继续`,
@@ -143,11 +164,31 @@ function render(): void {
   const isPlaying = session?.status === "playing";
   const isFinished = session && session.status !== "playing";
   const attempts = session?.guesses.length ?? 0;
-  const progress = session ? `${attempts} / ${session.maxAttempts}` : `0 / ${MAX_ATTEMPTS}`;
+  const maxAttempts = session?.maxAttempts ?? state.settings.maxAttempts;
+  const progress = `${attempts} / ${formatLimit(maxAttempts)}`;
   const status = statusInfo(session);
   const action = isPlaying
     ? `<form id="guess-form" class="guess-form" autocomplete="off"><label for="operator-search">提交干员</label><div class="search-wrap"><input id="operator-search" name="operator" type="search" placeholder="输入干员名称" aria-label="干员名称" aria-autocomplete="list" aria-controls="suggestions" /><button type="submit" aria-label="提交猜测">猜测 <span aria-hidden="true">→</span></button></div><div id="suggestions" class="suggestions" role="listbox"></div><p class="form-hint">可输入部分名称，再从候选中选择。</p></form>`
     : `<button class="start-button" id="start-game">${isFinished ? "再开一局" : "开始推演"}<span aria-hidden="true">→</span></button>${isFinished ? `<button class="quiet-button" id="clear-game">清除本局记录</button>` : ""}`;
+  const settingsPanel = `
+    <details class="settings-panel" id="settings-panel"${state.settingsOpen ? " open" : ""}>
+      <summary>游戏设置</summary>
+      <div class="settings-body">
+        <div class="setting-row">
+          <span class="setting-label">答案稀有度</span>
+          <div class="rarity-options">
+            ${RARITIES.map((rarity) => `<label class="rarity-option"><input type="checkbox" name="rarity" value="${rarity}"${state.settings.rarities.includes(rarity) ? " checked" : ""} /><span>${rarity}★</span></label>`).join("")}
+          </div>
+          <p class="setting-hint">只影响可作为答案的干员，不影响猜测。</p>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="max-attempts">最大猜测次数</label>
+          <input class="settings-number" id="max-attempts" type="number" min="-1" step="1" value="${state.settings.maxAttempts}" />
+          <p class="setting-hint">-1 表示不限次数；新设置从下一局开始生效。</p>
+        </div>
+        <p class="settings-error" id="settings-error" role="alert"></p>
+      </div>
+    </details>`;
 
   root.innerHTML = `
     <div class="page-shell">
@@ -160,6 +201,7 @@ function render(): void {
 
         <section class="action-area">
           ${action}
+          ${settingsPanel}
           ${state.notice ? `<p class="notice" role="status">${escapeHtml(state.notice)}</p>` : ""}
         </section>
 
@@ -182,6 +224,25 @@ function render(): void {
 
   document.querySelector<HTMLButtonElement>("#start-game")?.addEventListener("click", startGame);
   document.querySelector<HTMLButtonElement>("#restart-game")?.addEventListener("click", restartGame);
+  const settingsDetails = document.querySelector<HTMLDetailsElement>("#settings-panel");
+  settingsDetails?.addEventListener("toggle", () => {
+    state.settingsOpen = settingsDetails.open;
+  });
+  document.querySelectorAll<HTMLInputElement>('input[name="rarity"]').forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      readSettingsFromDom();
+      save();
+      updateSettingsError();
+      updateProgressPreview();
+    });
+  });
+  document.querySelector<HTMLInputElement>("#max-attempts")?.addEventListener("input", () => {
+    readSettingsFromDom();
+    save();
+    updateSettingsError();
+    updateProgressPreview();
+  });
+  updateSettingsError();
   document.querySelector<HTMLButtonElement>("#clear-game")?.addEventListener("click", () => {
     state.session = null;
     state.notice = "本局记录已清除。";
@@ -193,11 +254,51 @@ function render(): void {
   input?.addEventListener("input", () => renderSuggestions(input.value));
 }
 
+function readSettingsFromDom(): void {
+  const rarities = [...document.querySelectorAll<HTMLInputElement>('input[name="rarity"]:checked')]
+    .map((checkbox) => Number(checkbox.value))
+    .filter((value) => Number.isInteger(value) && value >= 1 && value <= 6)
+    .sort((left, right) => left - right);
+  const maxInput = document.querySelector<HTMLInputElement>("#max-attempts");
+  const parsed = maxInput ? Number(maxInput.value) : state.settings.maxAttempts;
+  state.settings = {
+    rarities,
+    maxAttempts: Number.isInteger(parsed) ? parsed : 0,
+  };
+}
+
+function updateSettingsError(): void {
+  const target = document.querySelector<HTMLElement>("#settings-error");
+  if (target) target.textContent = validateSettings(state.settings) ?? "";
+}
+
+function updateProgressPreview(): void {
+  if (state.session) return;
+  const target = document.querySelector<HTMLElement>(".progress");
+  if (target) target.textContent = `0 / ${formatLimit(state.settings.maxAttempts)}`;
+}
+
 function newSession(notice: string): void {
-  state.session = createGame(operators);
+  readSettingsFromDom();
+  const invalid = validateSettings(state.settings);
+  if (invalid) {
+    state.notice = invalid;
+    state.settingsOpen = true;
+    render();
+    return;
+  }
+  try {
+    state.session = createGame(operators, { settings: state.settings });
+  } catch (error) {
+    state.notice = error instanceof Error ? error.message : "无法开始游戏。";
+    state.settingsOpen = true;
+    render();
+    return;
+  }
   state.stats.gamesPlayed += 1;
   state.notice = notice;
   state.selectedId = "";
+  state.settingsOpen = false;
   save();
   render();
   document.querySelector<HTMLInputElement>("#operator-search")?.focus();

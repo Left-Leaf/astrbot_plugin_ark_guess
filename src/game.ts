@@ -42,14 +42,56 @@ export interface LocalStats {
   bestStreak: number;
 }
 
+export interface GameSettings {
+  rarities: number[];
+  maxAttempts: number;
+}
+
 export interface SavedGameData {
   version: 1;
   session: GameSession | null;
   stats: LocalStats;
+  settings?: GameSettings;
 }
 
 export const MAX_ATTEMPTS = 8;
+export const RARITIES = [1, 2, 3, 4, 5, 6] as const;
 export const STORAGE_KEY = "ark-operator-guess:v1";
+
+export function defaultSettings(): GameSettings {
+  return { rarities: [...RARITIES], maxAttempts: MAX_ATTEMPTS };
+}
+
+export function normalizeSettings(value: unknown): GameSettings {
+  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const rarities = Array.isArray(raw.rarities)
+    ? [...new Set(
+        raw.rarities.filter(
+          (item): item is number =>
+            typeof item === "number" && Number.isInteger(item) && item >= 1 && item <= 6,
+        ),
+      )].sort((left, right) => left - right)
+    : defaultSettings().rarities;
+  const maxAttempts =
+    typeof raw.maxAttempts === "number" && Number.isInteger(raw.maxAttempts)
+      ? raw.maxAttempts
+      : defaultSettings().maxAttempts;
+  return { rarities, maxAttempts };
+}
+
+export function validateSettings(settings: GameSettings): string | null {
+  if (!settings.rarities.length) {
+    return "请至少选择一个答案稀有度。";
+  }
+  if (
+    !Number.isInteger(settings.maxAttempts) ||
+    settings.maxAttempts === 0 ||
+    settings.maxAttempts < -1
+  ) {
+    return "最大猜测次数必须为正整数，或 -1（不限次数）。";
+  }
+  return null;
+}
 
 export function splitFactions(value: string): Set<string> {
   return new Set(
@@ -96,19 +138,32 @@ export function compareOperators(guess: Operator, answer: Operator): GuessResult
   };
 }
 
-export function createGame(
-  operators: Operator[],
-  random: () => number = Math.random,
-  now = Date.now(),
-): GameSession {
+export interface CreateGameOptions {
+  settings?: GameSettings;
+  random?: () => number;
+  now?: number;
+}
+
+export function createGame(operators: Operator[], options: CreateGameOptions = {}): GameSession {
   if (operators.length === 0) throw new Error("题库为空，无法开始游戏。");
-  const answer = operators[Math.floor(random() * operators.length)];
+  const settings = normalizeSettings(options.settings ?? defaultSettings());
+  const invalid = validateSettings(settings);
+  if (invalid) throw new Error(invalid);
+
+  const candidates = operators.filter((operator) => settings.rarities.includes(operator.rarity));
+  if (candidates.length === 0) {
+    throw new Error("当前稀有度设置下没有可作为答案的干员。");
+  }
+
+  const random = options.random ?? Math.random;
+  const index = Math.min(candidates.length - 1, Math.floor(random() * candidates.length));
+  const answer = candidates[index];
   return {
     answerId: answer.id,
     guesses: [],
-    maxAttempts: MAX_ATTEMPTS,
+    maxAttempts: settings.maxAttempts,
     status: "playing",
-    startedAt: now,
+    startedAt: options.now ?? Date.now(),
   };
 }
 
@@ -126,8 +181,8 @@ export function submitGuess(
   if (!answer) throw new Error("本局答案无效，请刷新页面重新开始。");
 
   const guesses = [...session.guesses, { operatorId: guess.id, result: compareOperators(guess, answer) }];
-  const status: GameStatus =
-    guess.id === answer.id ? "won" : guesses.length >= session.maxAttempts ? "lost" : "playing";
+  const limitReached = session.maxAttempts > 0 && guesses.length >= session.maxAttempts;
+  const status: GameStatus = guess.id === answer.id ? "won" : limitReached ? "lost" : "playing";
   return {
     ...session,
     guesses,
