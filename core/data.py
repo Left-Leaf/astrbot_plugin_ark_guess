@@ -17,6 +17,7 @@ from .errors import (
 )
 from .factions import split_factions
 from .models import Operator
+from .resolve import resolve_item, search_items
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,10 @@ class OperatorPool:
     operators: tuple[Operator, ...]
     by_id: dict[str, Operator]
     by_name: dict[str, list[Operator]]
+
+    @property
+    def items(self) -> tuple[Operator, ...]:
+        return self.operators
 
     @classmethod
     def from_records(cls, records: list[dict[str, Any]], version: str = "unknown") -> OperatorPool:
@@ -54,91 +59,20 @@ class OperatorPool:
 
     def resolve(self, query: str) -> Operator:
         """把用户输入解析为干员：id → 名称精确 → 唯一子串。"""
-        text = (query or "").strip()
-        compact = "".join(text.split())
-        if not compact:
-            raise InvalidGuessError("请输入干员名或干员 id")
-
-        if compact in self.by_id:
-            return self.by_id[compact]
-
-        for key in (text, compact):
-            exact = self.by_name.get(key)
-            if exact:
-                if len(exact) == 1:
-                    return exact[0]
-                raise AmbiguousOperatorError(
-                    f"「{key}」匹配到多个干员，请输入更完整的名称",
-                    [operator.name for operator in exact],
-                )
-
-        folded = compact.casefold()
-        exact_folded = [
-            operator
-            for operator in self.operators
-            if operator.name.casefold() == folded or operator.id.casefold() == folded
-        ]
-        if len(exact_folded) == 1:
-            return exact_folded[0]
-        if len(exact_folded) > 1:
-            raise AmbiguousOperatorError(
-                f"「{compact}」匹配到多个干员，请输入更完整的名称",
-                [operator.name for operator in exact_folded],
-            )
-
-        contains: list[Operator] = []
-        seen: set[str] = set()
-        for operator in self.operators:
-            if operator.id in seen:
-                continue
-            if folded in operator.name.casefold() or folded in operator.id.casefold():
-                contains.append(operator)
-                seen.add(operator.id)
-
-        if len(contains) == 1:
-            return contains[0]
-        if not contains:
-            raise UnknownOperatorError(f"找不到干员「{compact}」，可输入全名或干员 id")
-        raise AmbiguousOperatorError(
-            f"「{compact}」匹配到多个干员，请从下列名称中选择",
-            [operator.name for operator in contains[:10]],
+        return resolve_item(
+            self.operators,
+            self.by_id,
+            self.by_name,
+            query,
+            kind="干员",
+            unknown_error=UnknownOperatorError,
+            ambiguous_error=AmbiguousOperatorError,
+            invalid_error=InvalidGuessError,
         )
 
     def search(self, query: str, limit: int = 10) -> list[Operator]:
         """检索干员名称或 ID；无子串命中时提供轻量错字候选。"""
-        compact = "".join((query or "").casefold().split())
-        if not compact or len(compact) > 64 or limit <= 0:
-            return []
-
-        matches: list[tuple[int, Operator]] = []
-        for operator in self.operators:
-            name = "".join(operator.name.casefold().split())
-            operator_id = operator.id.casefold()
-            if name == compact or operator_id == compact:
-                rank = 0
-            elif name.startswith(compact):
-                rank = 1
-            elif compact in name:
-                rank = 2
-            elif compact in operator_id:
-                rank = 3
-            else:
-                continue
-            matches.append((rank, operator))
-
-        if matches:
-            matches.sort(key=lambda item: (item[0], item[1].name))
-            return [operator for _, operator in matches[:limit]]
-
-        max_distance = 1 if len(compact) < 5 else 2
-        fuzzy = [
-            (distance, operator)
-            for operator in self.operators
-            if (distance := _edit_distance(compact, "".join(operator.name.casefold().split())))
-            <= max_distance
-        ]
-        fuzzy.sort(key=lambda item: (item[0], item[1].name))
-        return [operator for _, operator in fuzzy[:limit]]
+        return search_items(self.operators, query, limit)
 
     def candidates(
         self,
@@ -166,22 +100,14 @@ class OperatorPool:
             raise EmptyPoolError("当前稀有度设置下没有可用于出题的干员")
         return (rng or random).choice(candidates)
 
-
-def _edit_distance(left: str, right: str) -> int:
-    """计算 Levenshtein 距离，检索候选规模较小，无需额外依赖。"""
-    previous = list(range(len(right) + 1))
-    for left_index, left_char in enumerate(left, start=1):
-        current = [left_index]
-        for right_index, right_char in enumerate(right, start=1):
-            current.append(
-                min(
-                    current[-1] + 1,
-                    previous[right_index] + 1,
-                    previous[right_index - 1] + (left_char != right_char),
-                )
-            )
-        previous = current
-    return previous[-1]
+    def random_item(
+        self,
+        rng: random.Random | None = None,
+        min_rarity: int = 1,
+        rarities: Collection[int] | None = None,
+    ) -> Operator:
+        """统一的出题入口，供 GameRegistry 无差别调用。"""
+        return self.random_operator(rng, min_rarity, rarities)
 
 
 def _parse_operator(raw: dict[str, Any]) -> Operator:

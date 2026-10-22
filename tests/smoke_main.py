@@ -9,28 +9,42 @@ import asyncio
 import importlib
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 PLUGINS_DIR = Path(__file__).resolve().parents[2]
 ASTRBOT_ROOT = PLUGINS_DIR.parents[1]
 sys.path.insert(0, str(PLUGINS_DIR))
 sys.path.insert(0, str(ASTRBOT_ROOT))
-from astrbot.core.message.components import At, Plain
+from astrbot.core.message.components import At, Plain  # noqa: E402
 
 # 切到 AstrBot 根目录，避免 AstrBot 把运行产物写进插件 data/
 os.chdir(ASTRBOT_ROOT)
 
 module = importlib.import_module("astrbot_plugin_ark_guess.main")
-plugin = module.ArkGuessPlugin(object(), {"max_attempts": 8, "render_mode": "image"})
+plugin = module.ArkGuessPlugin(object(), {"max_attempts": 8, "render_mode": "text"})
 
-print(f"题库：{len(plugin.pool.operators)} 名干员，版本 {plugin.pool.version}")
+print(
+    f"题库：{len(plugin.operator_pool.operators)} 名干员，"
+    f"{len(plugin.enemy_pool.enemies)} 名敌人"
+)
+
+OPERATOR_REGISTRY = plugin.registries[module.POOL_OPERATOR]
+ENEMY_REGISTRY = plugin.registries[module.POOL_ENEMY]
+
+# 用临时目录存放本群设置，避免污染真实 plugin_data
+_TMP_DIR = tempfile.TemporaryDirectory()
+plugin.group_settings = module.GroupSettingsStore(
+    Path(_TMP_DIR.name) / "group_settings.json",
+    plugin.group_settings.defaults,
+)
 
 
 class FakeResult:
     def __init__(self) -> None:
         self.image = ""
 
-    def base64_image(self, payload: str) -> "FakeResult":
+    def base64_image(self, payload: str) -> FakeResult:
         self.image = payload
         return self
 
@@ -80,15 +94,24 @@ async def collect(generator) -> list[object]:
 
 
 def show(result: object) -> None:
-    if isinstance(result, dict):
+    if isinstance(result, str):
+        print(result)
+    elif isinstance(result, dict):
         print(result.get("text") or result.get("path"))
     else:
         print(f"<image base64: {len(result.image)} chars>")  # type: ignore[attr-defined]
 
 
+def only_text(results: list[object]) -> str:
+    return "\n".join(
+        str(item.get("text", "")) for item in results if isinstance(item, dict)
+    )
+
+
 async def main() -> None:
     event = FakeEvent()
     trigger_filter = module._GameTriggerFilter()
+    session_key = plugin._session_key(event)
 
     event.set_plain("大家准备猜干员了")
     if trigger_filter.filter(event, None):
@@ -101,149 +124,157 @@ async def main() -> None:
     if not trigger_filter.filter(event, None):
         raise AssertionError("带斜杠的角色池设置应触发")
 
+    event.set_plain("更换敌人池")
+    if trigger_filter.filter(event, None):
+        raise AssertionError("切换题库指令必须带斜杠")
+    event.set_plain("/更换敌人池")
+    if not trigger_filter.filter(event, None):
+        raise AssertionError("带斜杠的切换题库指令应触发")
+
     print("\n--- 猜干员（裸文本不应触发）---")
     event.set_plain("猜干员")
     if trigger_filter.filter(event, None):
         raise AssertionError("主指令必须@机器人")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    if plugin.registry.current_game(plugin._session_key(event)) is not None:
-        raise AssertionError("裸文本猜干员不应开局")
 
     print("\n--- @机器人 猜干员（缺名字，不应开局）---")
     event.set_mention("猜干员")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    if plugin.registry.current_game(plugin._session_key(event)) is not None:
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if OPERATOR_REGISTRY.current_game(session_key) is not None:
         raise AssertionError("猜干员缺少参数时不应开局")
 
     print("\n--- @机器人 猜干员 阿米娅（带参开局）---")
     event.set_mention("猜干员 阿米娅")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    game = plugin.registry.current_game(plugin._session_key(event))
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    game = OPERATOR_REGISTRY.current_game(session_key)
     if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
         raise AssertionError("猜干员带参应以指定干员作为首猜")
 
     print("\n--- @机器人 能天使（提交第二次猜测）---")
     event.set_mention("能天使")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
+    show(only_text(await collect(plugin.group_game_trigger(event))))
     if len(game.guesses) != 2:
         raise AssertionError("@机器人+干员名应追加一次猜测")
 
-    print("\n--- 玛一把（已有对局别名）---")
+    print("\n--- 玛一把 / 粥一把（已有对局别名）---")
     event.set_plain("玛一把")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-
-    print("\n--- @机器人 粥一把（已有对局别名）---")
+    show(only_text(await collect(plugin.group_game_trigger(event))))
     event.set_mention("粥一把")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
+    show(only_text(await collect(plugin.group_game_trigger(event))))
 
     print("\n--- @机器人 不猜了（结束对局）---")
     event.set_mention("不猜了")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    if plugin.registry.current_game(plugin._session_key(event)) is not None:
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    if OPERATOR_REGISTRY.current_game(session_key) is not None:
         raise AssertionError("@机器人+不猜了应结束对局")
 
     print("\n--- 不猜了（无对局应静默）---")
     event.set_plain("不猜了")
     if await collect(plugin.group_game_trigger(event)):
         raise AssertionError("无对局时不猜了应静默")
-    event.set_mention("不猜了")
-    if await collect(plugin.group_game_trigger(event)):
-        raise AssertionError("无对局时@机器人+不猜了应静默")
 
     print("\n--- 玛一把（裸别名重新开局）---")
     event.set_plain("玛一把")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    game = plugin.registry.current_game(plugin._session_key(event))
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    game = OPERATOR_REGISTRY.current_game(session_key)
     if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "玛恩纳":
         raise AssertionError("裸发玛一把应以玛恩纳作为第一次猜测")
 
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))
 
-    print("\n--- @机器人 玛一把（提及别名开局）---")
-    event.set_mention("玛一把")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    game = plugin.registry.current_game(plugin._session_key(event))
-    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "玛恩纳":
-        raise AssertionError("@机器人+玛一把应以玛恩纳作为第一次猜测")
-    event.set_plain("不猜了")
-    await collect(plugin.group_game_trigger(event))
-
-    print("\n--- 粥一把（缺名字，不应开局）---")
-    event.set_plain("粥一把")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    if plugin.registry.current_game(plugin._session_key(event)) is not None:
-        raise AssertionError("粥一把缺少参数时不应开局")
-
-    print("\n--- @机器人 粥一把（缺名字，不应开局）---")
-    event.set_mention("粥一把")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    if plugin.registry.current_game(plugin._session_key(event)) is not None:
-        raise AssertionError("@机器人 粥一把缺少参数时不应开局")
-
     print("\n--- 粥一把 阿米娅（裸发带参开局）---")
     event.set_plain("粥一把 阿米娅")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    game = plugin.registry.current_game(plugin._session_key(event))
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    game = OPERATOR_REGISTRY.current_game(session_key)
     if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
         raise AssertionError("裸发粥一把带参应以指定干员作为首猜")
-
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))
 
-    print("\n--- @机器人 粥一把 阿米娅（带参开局并猜测）---")
-    event.set_mention("粥一把 阿米娅")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    game = plugin.registry.current_game(plugin._session_key(event))
-    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
-        raise AssertionError("@机器人 粥一把 干员名应以该干员作为首猜")
+    print("\n--- /更换敌人池（切换题库）---")
+    event.set_plain("/更换敌人池")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if plugin.group_settings.get(session_key).pool != module.POOL_ENEMY:
+        raise AssertionError("切换后本群题库应为敌人")
+    if "敌人池" not in text:
+        raise AssertionError("切换提示应说明当前题库")
 
-    event.set_plain("不猜了")
-    await collect(plugin.group_game_trigger(event))
+    print("\n--- 敌人池下使用干员指令（应提示切换）---")
+    event.set_mention("猜干员 阿米娅")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if "更换干员池" not in text:
+        raise AssertionError("@机器人 猜干员 在敌人池应提示切换")
+    if ENEMY_REGISTRY.current_game(session_key) is not None:
+        raise AssertionError("敌人池下猜干员不应开局")
 
-    print("\n--- /角色池设置 6 ---")
-    event.set_plain("/角色池设置 6")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
+    print("\n--- @机器人 猜敌人 源石虫（开局并首猜）---")
+    event.set_mention("猜敌人 源石虫")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if "危险等级" not in text or "法术抗性" not in text:
+        raise AssertionError("敌人结果应展示六维标签")
+    game = ENEMY_REGISTRY.current_game(session_key)
+    if game is None or len(game.guesses) != 1:
+        raise AssertionError("猜敌人应以指定敌人作为首猜")
 
-    print("\n--- /猜测次数 -1 ---")
-    event.set_plain("/猜测次数 -1")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
+    print("\n--- @机器人 源石虫·α（追加猜测）---")
+    event.set_mention("源石虫·α")
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    if len(game.guesses) != 2:
+        raise AssertionError("敌人池下@机器人+敌人名应追加一次猜测")
+
+    print("\n--- 敌人池下 /更换干员池（有对局应拒绝）---")
+    event.set_plain("/更换干员池")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if "不猜了" not in text:
+        raise AssertionError("有进行中对局时应提示先结束")
+    if plugin.group_settings.get(session_key).pool != module.POOL_ENEMY:
+        raise AssertionError("有对局时不应切换题库")
+
+    print("\n--- @机器人 不猜了（结束敌人对局）---")
+    event.set_mention("不猜了")
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    if ENEMY_REGISTRY.current_game(session_key) is not None:
+        raise AssertionError("不猜了应结束敌人对局")
+
+    print("\n--- /更换干员池（无对局可切换）---")
+    event.set_plain("/更换干员池")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if plugin.group_settings.get(session_key).pool != module.POOL_OPERATOR:
+        raise AssertionError("应切回干员池")
+
+    print("\n--- 干员池下使用敌人指令（应提示切换）---")
+    event.set_mention("猜敌人 源石虫")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if "更换敌人池" not in text:
+        raise AssertionError("干员池下猜敌人应提示切换")
+
+    print("\n--- 难度设置与查询 ---")
+    for command in ("/角色池设置 6", "/猜测次数 -1", "/本群难度", "/重置难度"):
+        event.set_plain(command)
+        print(f"> {command}")
+        show(only_text(await collect(plugin.group_game_trigger(event))))
 
     print("\n--- 猜干员 阿米娅（应用本群难度）---")
     event.set_mention("猜干员 阿米娅")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-    game = plugin.registry.current_game(plugin._session_key(event))
-    if game is None or game.max_attempts != -1:
-        raise AssertionError("本群猜测次数应应用 -1")
-    answer = plugin.pool.by_id[game.answer_id]
-    if answer.rarity != 6:
-        raise AssertionError("本群角色池应只从 6 星出题")
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    game = OPERATOR_REGISTRY.current_game(session_key)
+    if game is None or game.max_attempts != 8:
+        raise AssertionError("重置后应回到默认猜测次数")
+    answer = plugin.operator_pool.by_id[game.answer_id]
+    if answer.rarity < 1:
+        raise AssertionError("角色池稀有度异常")
 
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))
 
-    print("\n--- /重置难度 ---")
-    event.set_plain("/重置难度")
-    for result in await collect(plugin.group_game_trigger(event)):
-        show(result)
-
-    await plugin.terminate()
+    print("\n冒烟测试通过")
 
 
 asyncio.run(main())

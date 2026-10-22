@@ -8,8 +8,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from .data import OperatorPool
 from .models import Game
+from .profiles import OPERATOR_PROFILE, GameProfile
 
 SCALE = 2
 WIDTH = 860
@@ -20,7 +20,6 @@ ROW_H = 72
 GAP = 8
 STATUS_H = 52
 LEGEND_H = 30
-NAME_W = 190
 
 BG_TOP = (11, 18, 32)
 BG_BOTTOM = (16, 27, 45)
@@ -42,8 +41,6 @@ BLUE_TEXT = (191, 219, 254)
 WRONG_BG = (70, 24, 28, 255)
 WRONG_BORDER = (239, 68, 68, 255)
 WRONG_TEXT = (254, 202, 202)
-
-LABELS = ("稀有度", "职业 / 分支", "阵营", "种族", "实装")
 
 _FONT_CANDIDATES = {
     False: (
@@ -231,23 +228,31 @@ def _draw_name(
     )
 
 
-def _status(game: Game, pool: OperatorPool) -> tuple[str, str]:
+def _status(
+    game: Game,
+    pool,
+    profile: GameProfile,
+) -> tuple[str, str]:
     answer = pool.by_id.get(game.answer_id)
     if game.status in ("won", "lost"):
-        detail = (
-            f"{answer.name}（{answer.rarity}★ {answer.profession}/{answer.subclass}）"
-            if answer
-            else game.answer_id
-        )
+        detail = profile.answer_line(answer) if answer else game.answer_id
         prefix = "猜中了！答案是" if game.status == "won" else "次数用尽，答案是"
         return f"{prefix} {detail}", game.status
     if game.max_attempts == -1:
-        return "次数不限 · 艾特机器人并发送干员名继续", "playing"
+        return f"次数不限 · 艾特机器人并发送{profile.item_label}名继续", "playing"
     remaining = game.max_attempts - len(game.guesses)
-    return f"还剩 {remaining} 次机会 · 艾特机器人并发送干员名继续", "playing"
+    return (
+        f"还剩 {remaining} 次机会 · 艾特机器人并发送{profile.item_label}名继续",
+        "playing",
+    )
 
 
-def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -> Path:
+def render_board_image(
+    game: Game,
+    pool,
+    output_dir: str | Path,
+    profile: GameProfile = OPERATOR_PROFILE,
+) -> Path:
     """绘制结果卡片并保存为 PNG，返回文件路径。"""
     rows = len(game.guesses)
     height = (
@@ -309,7 +314,7 @@ def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -
     draw.text((x0, title_y), title_left, font=title_font, fill=TEXT, anchor="la")
     draw.text(
         (x0 + _text_width(draw, title_left, title_font), title_y),
-        "猜干员",
+        profile.title,
         font=title_font,
         fill=ACCENT,
         anchor="la",
@@ -328,18 +333,21 @@ def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -
     draw.line((x0, header_bottom, right, header_bottom), fill=BORDER, width=1 * SCALE)
     y = header_bottom + 12 * SCALE
 
-    # 列宽
+    # 列宽：按 profile 权重分配，支持 5 列（干员）与 6 列（敌人）
     cell_gap = GAP * SCALE
-    name_w = NAME_W * SCALE
-    cell_w = (content_w - name_w - 5 * cell_gap) / 5
+    label_count = len(profile.labels)
+    name_w = (190 if label_count <= 5 else 168) * SCALE
+    available = content_w - name_w - label_count * cell_gap
+    unit = available / sum(profile.weights)
     cell_boxes: list[tuple[float, float]] = []
     cursor = x0 + name_w + cell_gap
-    for _ in range(5):
-        cell_boxes.append((cursor, cursor + cell_w))
-        cursor += cell_w + cell_gap
+    for weight in profile.weights:
+        width = unit * weight
+        cell_boxes.append((cursor, cursor + width))
+        cursor += width + cell_gap
 
     label_font = _font(11)
-    for label, (left, cell_right) in zip(LABELS, cell_boxes, strict=True):
+    for label, (left, cell_right) in zip(profile.labels, cell_boxes, strict=True):
         draw.text(
             ((left + cell_right) / 2, y + 4 * SCALE),
             label,
@@ -351,27 +359,16 @@ def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -
 
     # 猜测行
     for record in game.guesses:
-        operator = pool.by_id.get(record.operator_id)
-        if operator is None:
+        item = pool.by_id.get(record.item_id)
+        if item is None:
             continue
         row_y = y
         row_bottom = y + ROW_H * SCALE
-        _draw_name(draw, (x0, row_y, x0 + name_w, row_bottom), operator.name, record.attempt)
+        _draw_name(draw, (x0, row_y, x0 + name_w, row_bottom), item.name, record.attempt)
 
-        hidden_sub = ""
-        if record.result.faction == "close" and operator.faction_hidden:
-            hidden_sub = "隐藏：" + "、".join(operator.faction_hidden)
-
-        values = (
-            (str(operator.rarity), record.result.rarity, ""),
-            (
-                operator.subclass,
-                record.result.subclass,
-                f"职业：{operator.profession}",
-            ),
-            (operator.faction.replace(",", "、"), record.result.faction, hidden_sub),
-            (operator.race, record.result.race, ""),
-            (str(operator.release_year), record.result.release_year, ""),
+        values = tuple(
+            (cell.text, cell.state, cell.sub)
+            for cell in profile.cells(item, record.result)
         )
         for (left, cell_right), (text, state, sub) in zip(cell_boxes, values, strict=True):
             _draw_cell(draw, (left, row_y, cell_right, row_bottom), text, state, sub)
@@ -380,7 +377,7 @@ def render_board_image(game: Game, pool: OperatorPool, output_dir: str | Path) -
 
     # 状态条
     status_y = y + (18 - GAP) * SCALE
-    status_text, status_kind = _status(game, pool)
+    status_text, status_kind = _status(game, pool, profile)
     if status_kind == "won":
         status_bg, status_border, status_color = GREEN_BG, GREEN_BORDER, (187, 247, 208)
     elif status_kind == "lost":

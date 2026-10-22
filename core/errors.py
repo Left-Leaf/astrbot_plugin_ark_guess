@@ -46,6 +46,18 @@ class AmbiguousOperatorError(ArkGuessError):
         self.candidates = candidates or []
 
 
+class UnknownEnemyError(ArkGuessError):
+    code = "UNKNOWN_ENEMY"
+
+
+class AmbiguousEnemyError(ArkGuessError):
+    code = "AMBIGUOUS_ENEMY"
+
+    def __init__(self, message: str, candidates: list[str] | None = None) -> None:
+        super().__init__(message, candidates=candidates or [])
+        self.candidates = candidates or []
+
+
 class InvalidMaxAttemptsError(ArkGuessError):
     code = "INVALID_MAX_ATTEMPTS"
 

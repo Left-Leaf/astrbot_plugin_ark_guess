@@ -7,18 +7,18 @@ import random
 import secrets
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
 from .compare import compare_operators
-from .data import OperatorPool
 from .errors import (
+    ArkGuessError,
     DuplicateGuessError,
     GameAlreadyActiveError,
     GameFinishedError,
     GameNotFoundError,
     InvalidMaxAttemptsError,
-    UnknownOperatorError,
 )
-from .models import Game, GuessRecord, SubmitOutcome
+from .models import CompareResult, Game, GuessRecord, SubmitOutcome
 
 
 def _utcnow() -> datetime:
@@ -36,7 +36,7 @@ class GameRegistry:
 
     def __init__(
         self,
-        pool: OperatorPool,
+        pool,
         *,
         max_attempts: int = 8,
         ttl_minutes: int = 120,
@@ -44,6 +44,9 @@ class GameRegistry:
         rng: random.Random | None = None,
         now: Callable[[], datetime] | None = None,
         id_factory: Callable[[], str] | None = None,
+        comparator: Callable[[Any, Any], CompareResult] = compare_operators,
+        item_label: str = "干员",
+        start_command: str = "猜干员",
     ) -> None:
         self._pool = pool
         self._default_max_attempts = max_attempts
@@ -52,13 +55,16 @@ class GameRegistry:
         self._rng = rng or random.Random()
         self._now = now or _utcnow
         self._id_factory = id_factory or (lambda: f"game_{secrets.token_urlsafe(6)}")
+        self._comparator = comparator
+        self._item_label = item_label
+        self._start_command = start_command
 
         self._games: dict[str, Game] = {}
         self._active: dict[str, str] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
     @property
-    def pool(self) -> OperatorPool:
+    def pool(self):
         return self._pool
 
     def current_game(self, session_key: str) -> Game | None:
@@ -118,16 +124,17 @@ class GameRegistry:
         existing = self.current_game(session_key)
         if existing is not None and existing.playing:
             raise GameAlreadyActiveError(
-                f"当前已有进行中的对局：{existing.id}，输入 猜干员 查看进度，或输入 不猜了 结束",
+                f"当前已有进行中的对局：{existing.id}，输入 {self._start_command} 查看进度，"
+                "或输入 不猜了 结束",
                 game_id=existing.id,
             )
 
         if answer_id:
             answer = self._pool.by_id.get(answer_id)
             if answer is None:
-                raise UnknownOperatorError(f"答案干员不在题库中：{answer_id}")
+                raise ArkGuessError(f"答案{self._item_label}不在题库中：{answer_id}")
         else:
-            answer = self._pool.random_operator(self._rng, self._min_rarity, rarities)
+            answer = self._pool.random_item(self._rng, self._min_rarity, rarities)
 
         timestamp = self._now()
         game = Game(
@@ -146,7 +153,9 @@ class GameRegistry:
         """提交一次猜测；同一对局内严格串行。"""
         game_id = self._active.get(session_key)
         if not game_id:
-            raise GameNotFoundError("当前没有进行中的对局，请先输入 猜干员 开始对局")
+            raise GameNotFoundError(
+                f"当前没有进行中的对局，请先输入 {self._start_command} 开始对局"
+            )
 
         lock = self._locks.get(game_id)
         if lock is None:
@@ -157,27 +166,30 @@ class GameRegistry:
             game = self._games.get(game_id)
             if game is None:
                 self._active.pop(session_key, None)
-                raise GameNotFoundError("当前没有进行中的对局，请先输入 猜干员 开始对局")
+                raise GameNotFoundError(
+                    f"当前没有进行中的对局，请先输入 {self._start_command} 开始对局"
+                )
             if not game.playing:
                 raise GameFinishedError(
-                    f"对局 {game.id} 已结束（{game.status}），输入 猜干员 开始新对局",
+                    f"对局 {game.id} 已结束（{game.status}），"
+                    f"输入 {self._start_command} 开始新对局",
                     game_id=game.id,
                 )
 
             guess = self._pool.resolve(query)
-            if any(record.operator_id == guess.id for record in game.guesses):
-                raise DuplicateGuessError(f"「{guess.name}」已经猜过了", operator_id=guess.id)
+            if any(record.item_id == guess.id for record in game.guesses):
+                raise DuplicateGuessError(f"「{guess.name}」已经猜过了", item_id=guess.id)
 
             answer = self._pool.by_id.get(game.answer_id)
             if answer is None:
-                raise UnknownOperatorError(f"答案干员不在题库中：{game.answer_id}")
+                raise ArkGuessError(f"答案{self._item_label}不在题库中：{game.answer_id}")
 
             timestamp = self._now()
             record = GuessRecord(
                 attempt=len(game.guesses) + 1,
-                operator_id=guess.id,
-                operator_name=guess.name,
-                result=compare_operators(guess, answer),
+                item_id=guess.id,
+                item_name=guess.name,
+                result=self._comparator(guess, answer),
                 guessed_at=timestamp,
             )
             game.guesses.append(record)

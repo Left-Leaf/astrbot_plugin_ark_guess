@@ -15,19 +15,22 @@ from PIL import Image
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN_ROOT))
 
-from core.compare import compare_operators  # noqa: E402
+from core.compare import compare_enemies, compare_operators  # noqa: E402
 from core.data import OperatorPool, load_operator_pool  # noqa: E402
+from core.enemies import EnemyPool, load_enemy_pool  # noqa: E402
 from core.errors import (  # noqa: E402
     DuplicateGuessError,
     GameAlreadyActiveError,
     GameNotFoundError,
     InvalidMaxAttemptsError,
+    UnknownEnemyError,
     UnknownOperatorError,
 )
 from core.game import GameRegistry  # noqa: E402
-from core.models import Operator  # noqa: E402
-from core.render import render_board, render_help, render_new_game  # noqa: E402
 from core.image_card import render_board_image  # noqa: E402
+from core.models import Enemy, Operator  # noqa: E402
+from core.profiles import ENEMY_PROFILE  # noqa: E402
+from core.render import render_board, render_help, render_new_game  # noqa: E402
 
 
 def make_operator(
@@ -401,6 +404,217 @@ class ImageRenderTests(unittest.TestCase):
             asyncio.run(registry.submit("s", "char_long"))
             played_path = render_board_image(game, pool, tmp)
             self.assertTrue(played_path.is_file())
+
+
+def make_enemy(
+    enemy_id: str,
+    name: str,
+    *,
+    level: str = "普通",
+    endure: str = "B",
+    attack: str = "B",
+    defence: str = "B",
+    resistance: str = "B",
+    debut: str = "初始",
+    debut_order: int = 0,
+    sort_id: int = 1,
+) -> Enemy:
+    return Enemy(
+        id=enemy_id,
+        name=name,
+        level=level,
+        endure=endure,
+        attack=attack,
+        defence=defence,
+        resistance=resistance,
+        debut=debut,
+        debut_order=debut_order,
+        sort_id=sort_id,
+        enemy_race="感染生物",
+        attack_type="近战",
+        damage_type="物理",
+        motion="地面",
+    )
+
+
+def enemy_record(enemy: Enemy) -> dict[str, object]:
+    return {
+        "id": enemy.id,
+        "name": enemy.name,
+        "level": enemy.level,
+        "endure": enemy.endure,
+        "attack": enemy.attack,
+        "defence": enemy.defence,
+        "resistance": enemy.resistance,
+        "debut": enemy.debut,
+        "debut_order": enemy.debut_order,
+        "sort_id": enemy.sort_id,
+        "enemy_race": enemy.enemy_race,
+        "attack_type": enemy.attack_type,
+        "damage_type": enemy.damage_type,
+        "motion": enemy.motion,
+    }
+
+
+def make_enemy_pool() -> EnemyPool:
+    enemies = [
+        make_enemy("enemy_a", "源石虫", endure="E", attack="E", defence="E"),
+        make_enemy(
+            "enemy_b",
+            "源石虫·α",
+            level="精英",
+            endure="D",
+            attack="C",
+            defence="B",
+            resistance="A",
+            debut="骑兵与猎人",
+            debut_order=1,
+            sort_id=20,
+        ),
+        make_enemy(
+            "enemy_c",
+            "霜星",
+            level="领袖",
+            endure="S",
+            attack="A",
+            defence="D",
+            resistance="S",
+            debut="主线第五章",
+            debut_order=2,
+            sort_id=80,
+        ),
+    ]
+    return EnemyPool.from_records([enemy_record(enemy) for enemy in enemies], version="test")
+
+
+class EnemyCompareTests(unittest.TestCase):
+    def test_grade_order_and_direction(self) -> None:
+        guess = make_enemy("g", "g", endure="B", attack="B+", defence="A", resistance="SS")
+        answer = make_enemy("a", "a", endure="B+", attack="B", defence="A+", resistance="S")
+        result = compare_enemies(guess, answer)
+        self.assertEqual(result.d2, "higher")
+        self.assertEqual(result.d3, "lower")
+        self.assertEqual(result.d4, "higher")
+        self.assertEqual(result.d5, "lower")
+
+    def test_equal_grades_are_correct(self) -> None:
+        guess = make_enemy("g", "g", endure="A+", attack="S", defence="C", resistance="D")
+        result = compare_enemies(guess, guess)
+        self.assertEqual(result.states, ("correct",) * 6)
+
+    def test_level_order(self) -> None:
+        guess = make_enemy("g", "g", level="普通")
+        elite = make_enemy("e", "e", level="精英")
+        boss = make_enemy("b", "b", level="领袖")
+        self.assertEqual(compare_enemies(guess, elite).d1, "higher")
+        self.assertEqual(compare_enemies(guess, boss).d1, "higher")
+        self.assertEqual(compare_enemies(boss, guess).d1, "lower")
+        self.assertEqual(compare_enemies(elite, elite).d1, "correct")
+
+    def test_debut_uses_activity_order(self) -> None:
+        early = make_enemy("e", "e", debut="初始", debut_order=0)
+        late = make_enemy("l", "l", debut="长夜临光", debut_order=9)
+        self.assertEqual(compare_enemies(early, late).d6, "higher")
+        self.assertEqual(compare_enemies(late, early).d6, "lower")
+        self.assertEqual(compare_enemies(early, early).d6, "correct")
+
+    def test_same_debut_is_correct_even_with_different_sort_id(self) -> None:
+        first = make_enemy("f", "f", debut="将进酒", debut_order=30, sort_id=383)
+        second = make_enemy("s", "s", debut="将进酒", debut_order=30, sort_id=416)
+        self.assertEqual(compare_enemies(first, second).d6, "correct")
+
+
+class EnemyDataTests(unittest.TestCase):
+    def test_bundled_dataset_loads(self) -> None:
+        pool = load_enemy_pool(PLUGIN_ROOT / "data" / "enemies.json")
+        self.assertGreater(len(pool.enemies), 1500)
+        self.assertTrue(pool.version)
+        enemy = pool.resolve("源石虫")
+        self.assertTrue(enemy.debut)
+        self.assertIn(enemy.level, {"普通", "精英", "领袖"})
+
+    def test_resolve_by_id_and_ambiguity(self) -> None:
+        pool = make_enemy_pool()
+        self.assertEqual(pool.resolve("源石虫").id, "enemy_a")
+        self.assertEqual(pool.resolve("enemy_b").name, "源石虫·α")
+        with self.assertRaises(UnknownEnemyError):
+            pool.resolve("不存在的敌人")
+
+    def test_search_finds_enemy_names(self) -> None:
+        pool = make_enemy_pool()
+        self.assertEqual([enemy.name for enemy in pool.search("霜星")], ["霜星"])
+        self.assertEqual(pool.search("   "), [])
+
+    def test_random_item_ignores_rarity_filters(self) -> None:
+        pool = make_enemy_pool()
+        picked = pool.random_item(random.Random(0), 6, (6,))
+        self.assertIn(picked.id, {"enemy_a", "enemy_b", "enemy_c"})
+
+
+class EnemyRegistryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_registry_uses_enemy_comparator(self) -> None:
+        registry = GameRegistry(
+            make_enemy_pool(),
+            comparator=compare_enemies,
+            item_label="敌人",
+            start_command="猜敌人",
+        )
+        game = registry.create("s", answer_id="enemy_c")
+        outcome = await registry.submit("s", "源石虫")
+        self.assertEqual(outcome.record.item_id, "enemy_a")
+        self.assertEqual(outcome.record.result.d1, "higher")
+        self.assertEqual(len(outcome.record.result.states), 6)
+        self.assertTrue(game.playing)
+
+    async def test_duplicate_enemy_guess(self) -> None:
+        registry = GameRegistry(make_enemy_pool(), comparator=compare_enemies)
+        registry.create("s", answer_id="enemy_c")
+        await registry.submit("s", "源石虫")
+        with self.assertRaises(DuplicateGuessError):
+            await registry.submit("s", "源石虫")
+
+
+class EnemyRenderTests(unittest.TestCase):
+    def test_text_board_has_six_dimensions(self) -> None:
+        registry = GameRegistry(
+            make_enemy_pool(), comparator=compare_enemies, item_label="敌人"
+        )
+        game = registry.create("s", answer_id="enemy_c")
+        asyncio.run(registry.submit("s", "源石虫"))
+        text = render_board(game, registry.pool, ENEMY_PROFILE)
+        for label in ("危险等级", "耐久", "攻击", "防御", "法术抗性", "实装"):
+            self.assertIn(label, text)
+        self.assertIn("猜敌人", text)
+
+    def test_new_game_and_help_mention_enemy_pool(self) -> None:
+        registry = GameRegistry(
+            make_enemy_pool(), comparator=compare_enemies, item_label="敌人"
+        )
+        game = registry.create("s", answer_id="enemy_c")
+        self.assertIn("名敌人", render_new_game(game, registry.pool, ENEMY_PROFILE))
+        help_text = render_help()
+        self.assertIn("更换敌人池", help_text)
+        self.assertIn("猜敌人", help_text)
+
+    def test_image_card_renders_six_columns(self) -> None:
+        registry = GameRegistry(
+            make_enemy_pool(), comparator=compare_enemies, item_label="敌人"
+        )
+        game = registry.create("s", answer_id="enemy_c")
+        asyncio.run(registry.submit("s", "源石虫"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = render_board_image(game, registry.pool, tmp, ENEMY_PROFILE)
+            self.assertTrue(path.is_file())
+            with Image.open(path) as image:
+                self.assertEqual(image.format, "PNG")
+                self.assertGreater(image.width, 800)
+                pixels = image.convert("RGB").getcolors(maxcolors=image.width * image.height)
+                colors = [color for _, color in pixels or []]
+                self.assertTrue(
+                    any(b > 180 and r < 100 for r, g, b in colors),
+                    "等级 / 评级方向提示应使用蓝色",
+                )
 
 
 if __name__ == "__main__":

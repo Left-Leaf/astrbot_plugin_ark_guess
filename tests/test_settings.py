@@ -44,9 +44,13 @@ class ParseSettingsTests(unittest.TestCase):
         self.assertTrue(is_difficulty_text("/猜测次数 8"))
         self.assertTrue(is_difficulty_text("/本群难度"))
         self.assertTrue(is_difficulty_text("/重置难度"))
+        self.assertTrue(is_difficulty_text("/更换干员池"))
+        self.assertTrue(is_difficulty_text("/更换敌人池"))
         self.assertFalse(is_difficulty_text("角色池设置 1256"))
         self.assertFalse(is_difficulty_text("猜测次数 8"))
         self.assertFalse(is_difficulty_text("本群难度"))
+        self.assertFalse(is_difficulty_text("更换干员池"))
+        self.assertFalse(is_difficulty_text("更换敌人池"))
         self.assertFalse(is_difficulty_text("/角色池设置很高"))
         self.assertFalse(is_difficulty_text(None))
 
@@ -58,16 +62,22 @@ class SettingsStoreTests(unittest.TestCase):
             path = Path(directory) / "group_settings.json"
             store = GroupSettingsStore(path, defaults)
             self.assertEqual(store.get("group:1"), defaults)
-            store.set("group:1", GroupSettings(rarities=(6,), max_attempts=-1))
+            self.assertEqual(store.get("group:1").pool, "operator")
+            store.set(
+                "group:1",
+                GroupSettings(rarities=(6,), max_attempts=-1, pool="enemy"),
+            )
 
             reloaded = GroupSettingsStore(path, defaults)
             self.assertTrue(reloaded.has("group:1"))
             self.assertEqual(reloaded.get("group:1").rarities, (6,))
             self.assertEqual(reloaded.get("group:1").max_attempts, -1)
+            self.assertEqual(reloaded.get("group:1").pool, "enemy")
 
             self.assertTrue(reloaded.clear("group:1"))
             self.assertFalse(reloaded.has("group:1"))
             self.assertEqual(reloaded.get("group:1"), defaults)
+            self.assertEqual(reloaded.get("group:1").pool, "operator")
 
 
 if __name__ == "__main__":

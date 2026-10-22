@@ -7,3 +7,4 @@ data/cmd_config.json
 data/t2i_templates/
 data/temp/
 tests/*.png
+tests/preview/
