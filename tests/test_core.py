@@ -25,7 +25,7 @@ from core.errors import (  # noqa: E402
 )
 from core.game import GameRegistry  # noqa: E402
 from core.models import Operator  # noqa: E402
-from core.render import render_board, render_new_game  # noqa: E402
+from core.render import render_board, render_help, render_new_game  # noqa: E402
 from core.image_card import render_board_image  # noqa: E402
 
 
@@ -129,6 +129,17 @@ class DataTests(unittest.TestCase):
         with self.assertRaises(UnknownOperatorError):
             pool.resolve("不存在的干员")
 
+    def test_search_finds_name_substrings(self) -> None:
+        pool = make_pool()
+        self.assertEqual([operator.name for operator in pool.search("乙")], ["乙"])
+
+    def test_search_suggests_typo_candidates(self) -> None:
+        pool = make_pool()
+        self.assertEqual([operator.name for operator in pool.search("甲甲")], ["甲"])
+
+    def test_search_empty_query_returns_no_results(self) -> None:
+        self.assertEqual(make_pool().search("   "), [])
+
 
 class RegistryTests(unittest.IsolatedAsyncioTestCase):
     async def test_instances_are_isolated(self) -> None:
@@ -231,6 +242,7 @@ class RenderTests(unittest.TestCase):
         registry = GameRegistry(make_pool())
         game = registry.create("s", answer_id="char_a")
         self.assertIn("🟩", render_new_game(game, registry.pool))
+        self.assertIn("查干员", render_help())
 
     def test_hidden_match_renders_yellow(self) -> None:
         registry = GameRegistry(make_pool())

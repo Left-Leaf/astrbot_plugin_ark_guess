@@ -102,6 +102,7 @@ def render_help(prefix: str = "/") -> str:
         f"{prefix}粥一把             开始对局；已有对局时显示当前进度\n"
         f"{prefix}粥一把 <干员名>    开始对局并立即猜一次\n"
         f"{prefix}猜干员 <干员名>    继续猜测（需先 {prefix}粥一把 开局）\n"
+        f"{prefix}查干员 <关键词>    检索干员资料，不影响对局\n"
         f"{prefix}不猜了             结束当前对局\n"
         f"{prefix}对局状态           查看当前对局\n"
         f"{prefix}对局统计           查看本进程对局数量\n"

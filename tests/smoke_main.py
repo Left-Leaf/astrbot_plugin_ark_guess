@@ -74,6 +74,15 @@ async def main() -> None:
     for result in await collect(plugin.ark_start(event, "阿米娅")):
         show(result)
 
+    game = plugin.registry.current_game(plugin._session_key(event))
+    guesses_before_search = len(game.guesses) if game is not None else 0
+    print("\n--- /查干员 阿米（检索不应影响对局）---")
+    for result in await collect(plugin.ark_search(event, "阿米")):
+        show(result)
+    game_after_search = plugin.registry.current_game(plugin._session_key(event))
+    if game_after_search is None or len(game_after_search.guesses) != guesses_before_search:
+        raise AssertionError("干员检索不应创建对局或消耗猜测次数")
+
     print("\n--- /粥一把（已有对局）---")
     for result in await collect(plugin.ark_start(event, "")):
         show(result)

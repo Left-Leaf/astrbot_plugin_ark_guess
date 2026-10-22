@@ -26,7 +26,7 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.1.3"
+VERSION = "1.2.0"
 
 
 def _as_int(value: object, default: int) -> int:
@@ -127,6 +127,40 @@ class ArkGuessPlugin(Star):
         except Exception:
             logger.exception("猜干员指令执行失败")
             yield event.plain_result("插件内部错误，请稍后再试")
+        finally:
+            event.stop_event()
+
+    @filter.command("查干员", alias={"干员查询", "干员检索"})
+    async def ark_search(self, event: AstrMessageEvent, arg: GreedyStr):
+        """只检索干员资料，不创建对局或消耗猜测次数。"""
+        query = str(arg).strip()
+        try:
+            if not query:
+                yield event.plain_result("请输入检索关键词。用法：/查干员 <关键词>")
+                return
+
+            matches = self.pool.search(query, limit=11)
+            if not matches:
+                yield event.plain_result(f"没有找到与「{query}」相近的干员。")
+                return
+
+            compact = "".join(query.casefold().split())
+            approximate = not any(
+                compact in "".join(operator.name.casefold().split())
+                or compact in operator.id.casefold()
+                for operator in matches
+            )
+            heading = "未找到直接匹配，近似候选" if approximate else "检索结果"
+            lines = [f"{heading}（仅检索，不计入猜测）："]
+            for index, operator in enumerate(matches[:10], start=1):
+                lines.append(
+                    f"{index}. {operator.name}｜{operator.rarity}★ "
+                    f"{operator.profession}/{operator.subclass}｜"
+                    f"{operator.faction.replace(',', '、')}｜{operator.release_year}年"
+                )
+            if len(matches) > 10:
+                lines.append("候选较多，仅显示前 10 名；请补充更具体的关键词。")
+            yield event.plain_result("\n".join(lines))
         finally:
             event.stop_event()
 

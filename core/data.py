@@ -103,6 +103,42 @@ class OperatorPool:
             [operator.name for operator in contains[:10]],
         )
 
+    def search(self, query: str, limit: int = 10) -> list[Operator]:
+        """检索干员名称或 ID；无子串命中时提供轻量错字候选。"""
+        compact = "".join((query or "").casefold().split())
+        if not compact or len(compact) > 64 or limit <= 0:
+            return []
+
+        matches: list[tuple[int, Operator]] = []
+        for operator in self.operators:
+            name = "".join(operator.name.casefold().split())
+            operator_id = operator.id.casefold()
+            if name == compact or operator_id == compact:
+                rank = 0
+            elif name.startswith(compact):
+                rank = 1
+            elif compact in name:
+                rank = 2
+            elif compact in operator_id:
+                rank = 3
+            else:
+                continue
+            matches.append((rank, operator))
+
+        if matches:
+            matches.sort(key=lambda item: (item[0], item[1].name))
+            return [operator for _, operator in matches[:limit]]
+
+        max_distance = 1 if len(compact) < 5 else 2
+        fuzzy = [
+            (distance, operator)
+            for operator in self.operators
+            if (distance := _edit_distance(compact, "".join(operator.name.casefold().split())))
+            <= max_distance
+        ]
+        fuzzy.sort(key=lambda item: (item[0], item[1].name))
+        return [operator for _, operator in fuzzy[:limit]]
+
     def candidates(self, min_rarity: int = 1) -> list[Operator]:
         """按最低稀有度过滤后的出题候选。"""
         return [operator for operator in self.operators if operator.rarity >= min_rarity]
@@ -116,6 +152,23 @@ class OperatorPool:
         if not candidates:
             raise EmptyPoolError(f"没有稀有度 >= {min_rarity} 的干员可用于出题")
         return (rng or random).choice(candidates)
+
+
+def _edit_distance(left: str, right: str) -> int:
+    """计算 Levenshtein 距离，检索候选规模较小，无需额外依赖。"""
+    previous = list(range(len(right) + 1))
+    for left_index, left_char in enumerate(left, start=1):
+        current = [left_index]
+        for right_index, right_char in enumerate(right, start=1):
+            current.append(
+                min(
+                    current[-1] + 1,
+                    previous[right_index] + 1,
+                    previous[right_index - 1] + (left_char != right_char),
+                )
+            )
+        previous = current
+    return previous[-1]
 
 
 def _parse_operator(raw: dict[str, Any]) -> Operator:
