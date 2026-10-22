@@ -129,14 +129,20 @@ async def main() -> None:
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
 
-    print("\n--- 不猜了（结束对局）---")
-    event.set_plain("不猜了")
+    print("\n--- @机器人 不猜了（结束对局）---")
+    event.set_mention("不猜了")
     for result in await collect(plugin.group_game_trigger(event)):
         show(result)
+    if plugin.registry.current_game(plugin._session_key(event)) is not None:
+        raise AssertionError("@机器人+不猜了应结束对局")
 
     print("\n--- 不猜了（无对局应静默）---")
+    event.set_plain("不猜了")
     if await collect(plugin.group_game_trigger(event)):
         raise AssertionError("无对局时不猜了应静默")
+    event.set_mention("不猜了")
+    if await collect(plugin.group_game_trigger(event)):
+        raise AssertionError("无对局时@机器人+不猜了应静默")
 
     print("\n--- 玛一把（裸别名重新开局）---")
     event.set_plain("玛一把")

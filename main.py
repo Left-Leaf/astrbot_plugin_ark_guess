@@ -28,7 +28,7 @@ from .core.errors import AmbiguousOperatorError, GameAlreadyActiveError
 from .core.image_card import render_board_image
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.3.1"
+VERSION = "1.3.2"
 START_TRIGGERS = frozenset({"猜干员", "玛一把", "粥一把"})
 BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
 MALYANAR_START_TRIGGER = "玛一把"
@@ -142,7 +142,7 @@ class ArkGuessPlugin(Star):
                 event.stop_event()
             return
 
-        if plain_text == END_TRIGGER:
+        if plain_text == END_TRIGGER or mentioned_text == END_TRIGGER:
             game = self.registry.close(session_key)
             if game is not None:
                 yield event.plain_result(f"已结束对局 {game.id}。")
