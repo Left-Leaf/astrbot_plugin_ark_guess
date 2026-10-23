@@ -118,6 +118,15 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(result.release_year, "higher")
         self.assertEqual(result.subclass, "close")
 
+    def test_release_year_distinguishes_activity_and_year(self) -> None:
+        answer = make_operator("a", "答", release_year=2020, debut="火蓝之心")
+        same_activity = make_operator("b", "乙", release_year=2020, debut="火蓝之心")
+        same_year = make_operator("c", "丙", release_year=2020, debut="火蓝之心2020")
+        other_year = make_operator("d", "丁", release_year=2019, debut="覆潮之下")
+        self.assertEqual(compare_operators(same_activity, answer).release_year, "correct")
+        self.assertEqual(compare_operators(same_year, answer).release_year, "close")
+        self.assertEqual(compare_operators(other_year, answer).release_year, "higher")
+
 
 class DataTests(unittest.TestCase):
     def test_bundled_dataset_loads(self) -> None:
@@ -291,6 +300,7 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
                     "faction_hidden": [],
                     "race": "沃尔珀",
                     "release_year": 2019,
+                    "debut": "初始",
                 },
                 {
                     "id": "char_b",
@@ -302,6 +312,7 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
                     "faction_hidden": [],
                     "race": "沃尔珀",
                     "release_year": 2019,
+                    "debut": "初始",
                 },
             ]
         )
@@ -310,6 +321,42 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         outcome = await registry.submit("s", "乙")
         self.assertTrue(outcome.finished)
         self.assertEqual(game.status, "won")
+
+    async def test_same_year_different_activity_is_partial(self) -> None:
+        pool = OperatorPool.from_records(
+            [
+                {
+                    "id": "char_a",
+                    "name": "甲",
+                    "rarity": 4,
+                    "profession": "医疗",
+                    "subclass": "医师",
+                    "faction": "罗德岛",
+                    "faction_hidden": [],
+                    "race": "沃尔珀",
+                    "release_year": 2019,
+                    "debut": "火蓝之心",
+                },
+                {
+                    "id": "char_b",
+                    "name": "乙",
+                    "rarity": 4,
+                    "profession": "医疗",
+                    "subclass": "医师",
+                    "faction": "罗德岛",
+                    "faction_hidden": [],
+                    "race": "沃尔珀",
+                    "release_year": 2019,
+                    "debut": "公测开服活动",
+                },
+            ]
+        )
+        registry = GameRegistry(pool)
+        game = registry.create("s", answer_id="char_a")
+        outcome = await registry.submit("s", "乙")
+        self.assertFalse(outcome.finished)
+        self.assertEqual(outcome.record.result.d5, "close")
+        self.assertTrue(game.playing)
 
     def test_expired_games_are_recycled(self) -> None:
         clock = [datetime(2026, 1, 1, tzinfo=timezone.utc)]

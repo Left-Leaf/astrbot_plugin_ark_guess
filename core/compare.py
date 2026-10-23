@@ -76,12 +76,23 @@ def compare_operators(guess: Operator, answer: Operator) -> CompareResult:
 
     race = "correct" if guess.race.strip() == answer.race.strip() else "wrong"
 
+    # 实装：登场活动一致 → correct（绿）；仅年份一致 → close（黄）；否则给年份方向
+    year_state = _compare_number(guess.release_year, answer.release_year)
+    guess_debut = guess.debut.strip()
+    answer_debut = answer.debut.strip()
+    if guess_debut and answer_debut and guess_debut == answer_debut:
+        release_state = "correct"
+    elif year_state == "correct":
+        release_state = "close"
+    else:
+        release_state = year_state
+
     return CompareResult(
         d1=_compare_number(guess.rarity, answer.rarity),
         d2=subclass,
         d3=faction,
         d4=race,
-        d5=_compare_number(guess.release_year, answer.release_year),
+        d5=release_state,
     )
 
 
