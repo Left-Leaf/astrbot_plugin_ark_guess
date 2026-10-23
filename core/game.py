@@ -196,10 +196,8 @@ class GameRegistry:
             game.guesses.append(record)
             game.updated_at = timestamp
 
-            # 两名条目维度完全相同时（如末药 / 苏苏洛），猜中任意一个都应结束对局
-            if guess.id == game.answer_id or all(
-                state == "correct" for state in result.states
-            ):
+            # 胜负严格以 id 为准：维度全部相同但 id 不同不算猜中
+            if guess.id == game.answer_id:
                 game.status = "won"
                 game.finished_at = timestamp
             elif game.max_attempts > 0 and len(game.guesses) >= game.max_attempts:

@@ -287,7 +287,7 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(GameNotFoundError):
             await registry.submit("group:1", "甲")
 
-    async def test_all_dimensions_correct_wins_for_twin(self) -> None:
+    async def test_all_dimensions_correct_but_id_differs_is_not_win(self) -> None:
         pool = OperatorPool.from_records(
             [
                 {
@@ -319,8 +319,8 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         registry = GameRegistry(pool)
         game = registry.create("s", answer_id="char_a")
         outcome = await registry.submit("s", "乙")
-        self.assertTrue(outcome.finished)
-        self.assertEqual(game.status, "won")
+        self.assertFalse(outcome.finished)
+        self.assertTrue(game.playing)
 
     async def test_same_year_different_activity_is_partial(self) -> None:
         pool = OperatorPool.from_records(
