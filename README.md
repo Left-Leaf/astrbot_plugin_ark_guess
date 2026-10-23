@@ -2,6 +2,11 @@
 
 AstrBot 的《明日方舟》猜干员 / 猜敌人插件。基于 PRTS 数据（434 名干员、1718 名敌人），每个群同一时间只启用一个题库，每个题库各自一个对局，支持多局并行与实例级并发控制。
 
+## 数据来源
+
+- `data/operators.json`、`data/enemies.json` 来自 [PRTS Wiki](https://prts.wiki)，按其 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh) 协议署名使用。
+- 本项目为非营利的爱好者作品，与鹰角网络、PRTS 均无隶属关系，游戏素材版权归原权利人所有。
+
 ## 指令
 
 | 指令 | 说明 |
