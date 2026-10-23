@@ -278,6 +278,39 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(GameNotFoundError):
             await registry.submit("group:1", "甲")
 
+    async def test_all_dimensions_correct_wins_for_twin(self) -> None:
+        pool = OperatorPool.from_records(
+            [
+                {
+                    "id": "char_a",
+                    "name": "甲",
+                    "rarity": 4,
+                    "profession": "医疗",
+                    "subclass": "医师",
+                    "faction": "罗德岛",
+                    "faction_hidden": [],
+                    "race": "沃尔珀",
+                    "release_year": 2019,
+                },
+                {
+                    "id": "char_b",
+                    "name": "乙",
+                    "rarity": 4,
+                    "profession": "医疗",
+                    "subclass": "医师",
+                    "faction": "罗德岛",
+                    "faction_hidden": [],
+                    "race": "沃尔珀",
+                    "release_year": 2019,
+                },
+            ]
+        )
+        registry = GameRegistry(pool)
+        game = registry.create("s", answer_id="char_a")
+        outcome = await registry.submit("s", "乙")
+        self.assertTrue(outcome.finished)
+        self.assertEqual(game.status, "won")
+
     def test_expired_games_are_recycled(self) -> None:
         clock = [datetime(2026, 1, 1, tzinfo=timezone.utc)]
         registry = GameRegistry(make_pool(), ttl_minutes=1, now=lambda: clock[0])

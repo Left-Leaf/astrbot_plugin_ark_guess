@@ -185,17 +185,21 @@ class GameRegistry:
                 raise ArkGuessError(f"答案{self._item_label}不在题库中：{game.answer_id}")
 
             timestamp = self._now()
+            result = self._comparator(guess, answer)
             record = GuessRecord(
                 attempt=len(game.guesses) + 1,
                 item_id=guess.id,
                 item_name=guess.name,
-                result=self._comparator(guess, answer),
+                result=result,
                 guessed_at=timestamp,
             )
             game.guesses.append(record)
             game.updated_at = timestamp
 
-            if guess.id == game.answer_id:
+            # 两名条目维度完全相同时（如末药 / 苏苏洛），猜中任意一个都应结束对局
+            if guess.id == game.answer_id or all(
+                state == "correct" for state in result.states
+            ):
                 game.status = "won"
                 game.finished_at = timestamp
             elif game.max_attempts > 0 and len(game.guesses) >= game.max_attempts:
