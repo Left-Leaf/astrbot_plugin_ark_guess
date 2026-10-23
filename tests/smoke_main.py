@@ -117,19 +117,16 @@ async def main() -> None:
     if trigger_filter.filter(event, None):
         raise AssertionError("普通聊天不应触发裸指令处理器")
 
-    event.set_plain("角色池设置 6")
+    event.set_plain("干员池稀有度 6")
     if trigger_filter.filter(event, None):
         raise AssertionError("难度设置指令必须带斜杠")
-    event.set_plain("/角色池设置 6")
+    event.set_plain("/干员池稀有度 6")
     if not trigger_filter.filter(event, None):
-        raise AssertionError("带斜杠的角色池设置应触发")
+        raise AssertionError("带斜杠的干员池稀有度应触发")
 
-    event.set_plain("更换敌人池")
-    if trigger_filter.filter(event, None):
-        raise AssertionError("切换题库指令必须带斜杠")
     event.set_plain("/更换敌人池")
-    if not trigger_filter.filter(event, None):
-        raise AssertionError("带斜杠的切换题库指令应触发")
+    if trigger_filter.filter(event, None):
+        raise AssertionError("已移除的切换题库指令不应触发")
 
     print("\n--- 猜干员（裸文本不应触发）---")
     event.set_plain("猜干员")
@@ -156,10 +153,8 @@ async def main() -> None:
     if len(game.guesses) != 2:
         raise AssertionError("@机器人+干员名应追加一次猜测")
 
-    print("\n--- 玛一把 / 粥一把（已有对局别名）---")
+    print("\n--- 玛一把（已有对局别名）---")
     event.set_plain("玛一把")
-    show(only_text(await collect(plugin.group_game_trigger(event))))
-    event.set_mention("粥一把")
     show(only_text(await collect(plugin.group_game_trigger(event))))
 
     print("\n--- @机器人 不猜了（结束对局）---")
@@ -183,80 +178,51 @@ async def main() -> None:
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))
 
-    print("\n--- 粥一把 阿米娅（裸发带参开局）---")
+    print("\n--- 粥一把（已移除，应不触发）---")
     event.set_plain("粥一把 阿米娅")
-    show(only_text(await collect(plugin.group_game_trigger(event))))
-    game = OPERATOR_REGISTRY.current_game(session_key)
-    if game is None or len(game.guesses) != 1 or game.guesses[0].operator_name != "阿米娅":
-        raise AssertionError("裸发粥一把带参应以指定干员作为首猜")
-    event.set_plain("不猜了")
-    await collect(plugin.group_game_trigger(event))
+    if await collect(plugin.group_game_trigger(event)):
+        raise AssertionError("粥一把 已移除，不应有任何回复")
 
-    print("\n--- /更换敌人池（切换题库）---")
+    print("\n--- /更换敌人池（已移除，应不触发）---")
     event.set_plain("/更换敌人池")
-    text = only_text(await collect(plugin.group_game_trigger(event)))
-    show(text)
-    if plugin.group_settings.get(session_key).pool != module.POOL_ENEMY:
-        raise AssertionError("切换后本群题库应为敌人")
-    if "敌人池" not in text:
-        raise AssertionError("切换提示应说明当前题库")
+    if await collect(plugin.group_game_trigger(event)):
+        raise AssertionError("更换题库指令已移除，不应有任何回复")
 
-    print("\n--- 敌人池下使用干员指令（应提示切换）---")
+    print("\n--- 干员池与敌人池并行 ---")
     event.set_mention("猜干员 阿米娅")
-    text = only_text(await collect(plugin.group_game_trigger(event)))
-    show(text)
-    if "更换干员池" not in text:
-        raise AssertionError("@机器人 猜干员 在敌人池应提示切换")
-    if ENEMY_REGISTRY.current_game(session_key) is not None:
-        raise AssertionError("敌人池下猜干员不应开局")
-
-    print("\n--- @机器人 猜敌人 源石虫（开局并首猜）---")
+    show(only_text(await collect(plugin.group_game_trigger(event))))
     event.set_mention("猜敌人 源石虫")
-    text = only_text(await collect(plugin.group_game_trigger(event)))
-    show(text)
-    if "危险等级" not in text or "法术抗性" not in text:
-        raise AssertionError("敌人结果应展示六维标签")
-    game = ENEMY_REGISTRY.current_game(session_key)
-    if game is None or len(game.guesses) != 1:
-        raise AssertionError("猜敌人应以指定敌人作为首猜")
+    show(only_text(await collect(plugin.group_game_trigger(event))))
+    if OPERATOR_REGISTRY.current_game(session_key) is None:
+        raise AssertionError("敌人开局不应影响干员对局")
+    if ENEMY_REGISTRY.current_game(session_key) is None:
+        raise AssertionError("干员对局存在时应能开敌人对局")
 
-    print("\n--- @机器人 源石虫·α（追加猜测）---")
+    print("\n--- 双对局下 @机器人 源石虫·α（应进入敌人池）---")
     event.set_mention("源石虫·α")
-    show(only_text(await collect(plugin.group_game_trigger(event))))
-    if len(game.guesses) != 2:
-        raise AssertionError("敌人池下@机器人+敌人名应追加一次猜测")
-
-    print("\n--- 敌人池下 /更换干员池（有对局应拒绝）---")
-    event.set_plain("/更换干员池")
     text = only_text(await collect(plugin.group_game_trigger(event)))
     show(text)
-    if "不猜了" not in text:
-        raise AssertionError("有进行中对局时应提示先结束")
-    if plugin.group_settings.get(session_key).pool != module.POOL_ENEMY:
-        raise AssertionError("有对局时不应切换题库")
+    if "危险等级" not in text:
+        raise AssertionError("双对局下应把敌人名分流到敌人池")
 
-    print("\n--- @机器人 不猜了（结束敌人对局）---")
-    event.set_mention("不猜了")
-    show(only_text(await collect(plugin.group_game_trigger(event))))
+    print("\n--- 双对局下 @机器人 能天使（应进入干员池）---")
+    event.set_mention("能天使")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if "暴击" in text or "分支" not in text:
+        raise AssertionError("双对局下应把干员名分流到干员池")
+
+    print("\n--- 不猜了（应同时结束两个对局）---")
+    event.set_plain("不猜了")
+    text = only_text(await collect(plugin.group_game_trigger(event)))
+    show(text)
+    if OPERATOR_REGISTRY.current_game(session_key) is not None:
+        raise AssertionError("不猜了应结束干员对局")
     if ENEMY_REGISTRY.current_game(session_key) is not None:
         raise AssertionError("不猜了应结束敌人对局")
 
-    print("\n--- /更换干员池（无对局可切换）---")
-    event.set_plain("/更换干员池")
-    text = only_text(await collect(plugin.group_game_trigger(event)))
-    show(text)
-    if plugin.group_settings.get(session_key).pool != module.POOL_OPERATOR:
-        raise AssertionError("应切回干员池")
-
-    print("\n--- 干员池下使用敌人指令（应提示切换）---")
-    event.set_mention("猜敌人 源石虫")
-    text = only_text(await collect(plugin.group_game_trigger(event)))
-    show(text)
-    if "更换敌人池" not in text:
-        raise AssertionError("干员池下猜敌人应提示切换")
-
     print("\n--- 难度设置与查询 ---")
-    for command in ("/角色池设置 6", "/猜测次数 -1", "/本群难度", "/重置难度"):
+    for command in ("/干员池稀有度 6", "/猜测次数 -1", "/本群难度", "/重置难度"):
         event.set_plain(command)
         print(f"> {command}")
         show(only_text(await collect(plugin.group_game_trigger(event))))
@@ -269,7 +235,7 @@ async def main() -> None:
         raise AssertionError("重置后应回到默认猜测次数")
     answer = plugin.operator_pool.by_id[game.answer_id]
     if answer.rarity < 1:
-        raise AssertionError("角色池稀有度异常")
+raise AssertionError("干员池稀有度异常")
 
     event.set_plain("不猜了")
     await collect(plugin.group_game_trigger(event))

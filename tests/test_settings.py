@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -40,18 +41,14 @@ class ParseSettingsTests(unittest.TestCase):
                 parse_attempt_limit(value)
 
     def test_detects_difficulty_commands(self) -> None:
-        self.assertTrue(is_difficulty_text("/角色池设置 1256"))
+        self.assertTrue(is_difficulty_text("/干员池稀有度 1256"))
         self.assertTrue(is_difficulty_text("/猜测次数 8"))
         self.assertTrue(is_difficulty_text("/本群难度"))
         self.assertTrue(is_difficulty_text("/重置难度"))
-        self.assertTrue(is_difficulty_text("/更换干员池"))
-        self.assertTrue(is_difficulty_text("/更换敌人池"))
-        self.assertFalse(is_difficulty_text("角色池设置 1256"))
+        self.assertFalse(is_difficulty_text("干员池稀有度 1256"))
         self.assertFalse(is_difficulty_text("猜测次数 8"))
         self.assertFalse(is_difficulty_text("本群难度"))
-        self.assertFalse(is_difficulty_text("更换干员池"))
-        self.assertFalse(is_difficulty_text("更换敌人池"))
-        self.assertFalse(is_difficulty_text("/角色池设置很高"))
+        self.assertFalse(is_difficulty_text("/干员池稀有度很高"))
         self.assertFalse(is_difficulty_text(None))
 
 
@@ -62,22 +59,40 @@ class SettingsStoreTests(unittest.TestCase):
             path = Path(directory) / "group_settings.json"
             store = GroupSettingsStore(path, defaults)
             self.assertEqual(store.get("group:1"), defaults)
-            self.assertEqual(store.get("group:1").pool, "operator")
-            store.set(
-                "group:1",
-                GroupSettings(rarities=(6,), max_attempts=-1, pool="enemy"),
-            )
+            store.set("group:1", GroupSettings(rarities=(6,), max_attempts=-1))
 
             reloaded = GroupSettingsStore(path, defaults)
             self.assertTrue(reloaded.has("group:1"))
             self.assertEqual(reloaded.get("group:1").rarities, (6,))
             self.assertEqual(reloaded.get("group:1").max_attempts, -1)
-            self.assertEqual(reloaded.get("group:1").pool, "enemy")
 
             self.assertTrue(reloaded.clear("group:1"))
             self.assertFalse(reloaded.has("group:1"))
             self.assertEqual(reloaded.get("group:1"), defaults)
-            self.assertEqual(reloaded.get("group:1").pool, "operator")
+
+    def test_ignores_legacy_pool_field(self) -> None:
+        defaults = GroupSettings(rarities=(1, 2, 3, 4, 5, 6), max_attempts=8)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "group_settings.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "groups": {
+                            "group:1": {
+                                "rarities": [4, 5, 6],
+                                "maxAttempts": 10,
+                                "pool": "enemy",
+                            }
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            store = GroupSettingsStore(path, defaults)
+            self.assertEqual(store.get("group:1").rarities, (4, 5, 6))
+            self.assertEqual(store.get("group:1").max_attempts, 10)
 
 
 if __name__ == "__main__":

@@ -708,8 +708,10 @@ class EnemyRenderTests(unittest.TestCase):
         game = registry.create("s", answer_id="enemy_c")
         self.assertIn("名敌人", render_new_game(game, registry.pool, ENEMY_PROFILE))
         help_text = render_help()
-        self.assertIn("更换敌人池", help_text)
         self.assertIn("猜敌人", help_text)
+        self.assertIn("干员池稀有度", help_text)
+        self.assertNotIn("更换敌人池", help_text)
+        self.assertNotIn("粥一把", help_text)
 
     def test_image_card_renders_six_columns(self) -> None:
         registry = GameRegistry(

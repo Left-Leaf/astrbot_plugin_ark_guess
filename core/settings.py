@@ -1,4 +1,4 @@
-"""按群保存的设置：题库、答案稀有度池与最大猜测次数。"""
+"""按群保存的设置：答案稀有度池与最大猜测次数。"""
 
 from __future__ import annotations
 
@@ -10,14 +10,10 @@ from pathlib import Path
 RARITIES = (1, 2, 3, 4, 5, 6)
 POOL_OPERATOR = "operator"
 POOL_ENEMY = "enemy"
-POOLS = (POOL_OPERATOR, POOL_ENEMY)
-RARITY_TRIGGER = "角色池设置"
+RARITY_TRIGGER = "干员池稀有度"
 ATTEMPTS_TRIGGER = "猜测次数"
 VIEW_TRIGGER = "本群难度"
 RESET_TRIGGER = "重置难度"
-SWITCH_OPERATOR_TRIGGER = "更换干员池"
-SWITCH_ENEMY_TRIGGER = "更换敌人池"
-_SWITCH_TRIGGERS = frozenset({SWITCH_OPERATOR_TRIGGER, SWITCH_ENEMY_TRIGGER})
 _VIEW_TRIGGERS = frozenset({VIEW_TRIGGER})
 
 
@@ -27,7 +23,6 @@ class GroupSettings:
 
     rarities: tuple[int, ...]
     max_attempts: int
-    pool: str = POOL_OPERATOR
 
 
 def validate_settings(settings: GroupSettings) -> str | None:
@@ -37,8 +32,6 @@ def validate_settings(settings: GroupSettings) -> str | None:
         return "稀有度必须是 1-6 的整数。"
     if settings.max_attempts == 0 or settings.max_attempts < -1:
         return "最大猜测次数必须是正整数，或 -1（不限次数）。"
-    if settings.pool not in POOLS:
-        return "题库类型必须是 operator 或 enemy。"
     return None
 
 
@@ -52,7 +45,7 @@ def parse_rarity_pool(args: str) -> tuple[int, ...]:
     """解析“123456”“1256”“136”形式的稀有度数字串。"""
     digits = args.strip()
     if not digits or any(character not in "123456" for character in digits):
-        raise ValueError("用法：角色池设置 123456（只填 1-6，可任意组合）")
+        raise ValueError("用法：干员池稀有度 123456（只填 1-6，可任意组合）")
     return tuple(sorted({int(character) for character in digits}))
 
 
@@ -68,14 +61,13 @@ def parse_attempt_limit(args: str) -> int:
 
 
 def is_difficulty_text(text: str | None) -> bool:
-    """判断是否为难度 / 题库相关指令，供群聊过滤器使用；必须带前导斜杠。"""
+    """判断是否为难度相关指令，供群聊过滤器使用；必须带前导斜杠。"""
     raw = (text or "").strip()
     if not raw.startswith("/"):
         return False
     value = normalize_command_text(raw)
     return (
         value in _VIEW_TRIGGERS
-        or value in _SWITCH_TRIGGERS
         or value in {RARITY_TRIGGER, ATTEMPTS_TRIGGER, RESET_TRIGGER}
         or value.startswith(f"{RARITY_TRIGGER} ")
         or value.startswith(f"{ATTEMPTS_TRIGGER} ")
@@ -138,7 +130,6 @@ class GroupSettingsStore:
                         )
                     ),
                     max_attempts=int(raw.get("maxAttempts", self._defaults.max_attempts)),
-                    pool=str(raw.get("pool", self._defaults.pool)),
                 )
             except (TypeError, ValueError):
                 continue
@@ -153,7 +144,6 @@ class GroupSettingsStore:
                 session_key: {
                     "rarities": list(settings.rarities),
                     "maxAttempts": settings.max_attempts,
-                    "pool": settings.pool,
                 }
                 for session_key, settings in self._groups.items()
             },

@@ -35,8 +35,6 @@ from .core.settings import (
     POOL_OPERATOR,
     RARITY_TRIGGER,
     RESET_TRIGGER,
-    SWITCH_ENEMY_TRIGGER,
-    SWITCH_OPERATOR_TRIGGER,
     VIEW_TRIGGER,
     GroupSettings,
     GroupSettingsStore,
@@ -47,11 +45,10 @@ from .core.settings import (
 )
 
 PLUGIN_NAME = "astrbot_plugin_ark_guess"
-VERSION = "1.6.0"
-BARE_START_ALIASES = frozenset({"玛一把", "粥一把"})
+VERSION = "1.7.0"
 MALYANAR_START_TRIGGER = "玛一把"
 MALYANAR_NAME = "玛恩纳"
-QUICK_GUESS_START_TRIGGER = "粥一把"
+BARE_START_ALIASES = frozenset({MALYANAR_START_TRIGGER})
 MAIN_START_TRIGGER = "猜干员"
 ENEMY_START_TRIGGER = "猜敌人"
 END_TRIGGER = "不猜了"
@@ -96,7 +93,6 @@ class _GameTriggerFilter(CustomFilter):
         plain_text = _plain_message_text(event)
         if (
             plain_text in BARE_START_ALIASES
-            or _command_argument(plain_text, QUICK_GUESS_START_TRIGGER) is not None
             or plain_text == END_TRIGGER
             or is_difficulty_text(plain_text)
         ):
@@ -114,7 +110,7 @@ def _as_int(value: object, default: int) -> int:
 @register(
     PLUGIN_NAME,
     "Left-Leaf",
-    "明日方舟猜干员 / 猜敌人：多维度提示、站点式卡片、每群可切题库",
+    "明日方舟猜干员 / 猜敌人：多维度提示、站点式卡片、双题库并行",
     VERSION,
 )
 class ArkGuessPlugin(Star):
@@ -184,28 +180,9 @@ class ArkGuessPlugin(Star):
         )
         session_key = self._session_key(event)
         settings = self.group_settings.get(session_key)
-        active_pool = settings.pool
-
-        if command_text in (SWITCH_OPERATOR_TRIGGER, SWITCH_ENEMY_TRIGGER):
-            target = (
-                POOL_OPERATOR
-                if command_text == SWITCH_OPERATOR_TRIGGER
-                else POOL_ENEMY
-            )
-            yield event.plain_result(self._switch_pool(session_key, target))
-            event.stop_event()
-            return
 
         mentioned_main_guess = _command_argument(mentioned_text, MAIN_START_TRIGGER)
-        mentioned_quick_guess = _command_argument(mentioned_text, QUICK_GUESS_START_TRIGGER)
         mentioned_enemy_guess = _command_argument(mentioned_text, ENEMY_START_TRIGGER)
-        bare_quick_guess = _command_argument(plain_text, QUICK_GUESS_START_TRIGGER)
-        quick_start = (
-            plain_text == QUICK_GUESS_START_TRIGGER
-            or mentioned_text == QUICK_GUESS_START_TRIGGER
-            or bare_quick_guess is not None
-            or mentioned_quick_guess is not None
-        )
         starts_with_mlynar = (
             plain_text == MALYANAR_START_TRIGGER
             or mentioned_text == MALYANAR_START_TRIGGER
@@ -217,34 +194,20 @@ class ArkGuessPlugin(Star):
             start_pool, guess_name = POOL_OPERATOR, MALYANAR_NAME
         elif mentioned_main_guess is not None:
             start_pool, guess_name = POOL_OPERATOR, mentioned_main_guess
-        elif quick_start:
-            start_pool = POOL_OPERATOR
-            guess_name = (
-                mentioned_quick_guess
-                if mentioned_quick_guess is not None
-                else bare_quick_guess
-            )
         elif mentioned_enemy_guess is not None:
             start_pool, guess_name = POOL_ENEMY, mentioned_enemy_guess
 
         if start_pool is not None:
             self._ensure_cleanup_task()
             try:
-                if start_pool != active_pool:
-                    yield event.plain_result(
-                        f"⚠️ 本群当前是{_POOL_LABELS[active_pool]}池，"
-                        f"{self._start_pool_trigger(start_pool)} 暂不可用。\n"
-                        f"发送 /{self._switch_pool_trigger(start_pool)} 切换后再试。"
-                    )
-                    return
                 if not guess_name:
-                    yield event.plain_result(self._missing_name_text(active_pool))
+                    yield event.plain_result(self._missing_name_text(start_pool))
                     return
-                registry = self.registries[active_pool]
+                registry = self.registries[start_pool]
                 current = registry.current_game(session_key)
                 if current is not None and current.playing:
                     yield event.plain_result(f"当前群已有进行中的对局：{current.id}")
-                    yield await self._respond_board(event, current, active_pool)
+                    yield await self._respond_board(event, current, start_pool)
                     return
                 registry.pool.resolve(guess_name)
                 registry.start_or_get(
@@ -253,7 +216,7 @@ class ArkGuessPlugin(Star):
                     rarities=settings.rarities,
                 )
                 outcome = await registry.submit(session_key, guess_name)
-                yield await self._respond_board(event, outcome.game, active_pool)
+                yield await self._respond_board(event, outcome.game, start_pool)
             except ArkGuessError as exc:
                 yield event.plain_result(self._error_text(exc))
             except Exception:
@@ -264,9 +227,13 @@ class ArkGuessPlugin(Star):
             return
 
         if plain_text == END_TRIGGER or mentioned_text == END_TRIGGER:
-            game = self.registries[active_pool].close(session_key)
-            if game is not None:
-                yield event.plain_result(f"已结束对局 {game.id}。")
+            closed: list[str] = []
+            for pool, label in _POOL_LABELS.items():
+                game = self.registries[pool].close(session_key)
+                if game is not None:
+                    closed.append(f"{label}对局 {game.id}")
+            if closed:
+                yield event.plain_result("已结束" + "、".join(closed) + "。")
             event.stop_event()
             return
 
@@ -277,9 +244,9 @@ class ArkGuessPlugin(Star):
 
         if command_text == RARITY_TRIGGER:
             yield event.plain_result(
-                "⚙️ 本群角色池（仅干员池生效）\n"
+                "⚙️ 本群干员池稀有度（仅干员池生效）\n"
                 f"答案稀有度：{self._rarity_text(settings)}\n"
-                "修改：角色池设置 1256（只填 1-6，可任意组合）"
+                "修改：干员池稀有度 1256（只填 1-6，可任意组合）"
             )
             event.stop_event()
             return
@@ -311,7 +278,7 @@ class ArkGuessPlugin(Star):
                 return
             self.group_settings.set(session_key, replace(settings, rarities=rarities))
             yield event.plain_result(
-                "✅ 本群角色池已更新（下一局生效）\n"
+                "✅ 本群干员池稀有度已更新（下一局生效）\n"
                 f"答案稀有度：{self._rarity_text(self.group_settings.get(session_key))}"
             )
             event.stop_event()
@@ -334,19 +301,37 @@ class ArkGuessPlugin(Star):
             return
 
         query = mentioned_text
-        registry = self.registries[active_pool]
-        current = registry.current_game(session_key)
-        if query is None or current is None or not current.playing:
+        if query is None:
             return
+        active_pools = [
+            pool
+            for pool in _POOL_LABELS
+            if (game := self.registries[pool].current_game(session_key)) is not None
+            and game.playing
+        ]
+        if not active_pools:
+            return
+        if len(active_pools) > 1:
+            matched = [pool for pool in active_pools if self._can_resolve(pool, query)]
+            if len(matched) != 1:
+                yield event.plain_result(
+                    f"⚠️ 本群同时有干员与敌人对局，无法判断「{query}」属于哪个题库。\n"
+                    "发送 不猜了 结束对局后重新开局；也可先用 /查干员、/查敌人 确认名称。"
+                )
+                event.stop_event()
+                return
+            active_pools = matched
 
+        pool = active_pools[0]
+        registry = self.registries[pool]
         self._ensure_cleanup_task()
         try:
             outcome = await registry.submit(session_key, query)
-            yield await self._respond_board(event, outcome.game, active_pool)
+            yield await self._respond_board(event, outcome.game, pool)
         except ArkGuessError as exc:
             yield event.plain_result(self._error_text(exc))
         except Exception:
-            logger.exception("@机器人猜%s失败", _POOL_LABELS[active_pool])
+            logger.exception("@机器人猜%s失败", _POOL_LABELS[pool])
             yield event.plain_result("插件内部错误，请稍后再试")
         finally:
             event.stop_event()
@@ -385,14 +370,18 @@ class ArkGuessPlugin(Star):
 
     @filter.command("对局状态", alias={"猜干员状态", "猜敌人状态"})
     async def ark_status(self, event: AstrMessageEvent):
-        """查看当前群的对局。"""
+        """查看当前群的对局（干员 / 敌人可能同时存在）。"""
         try:
             session_key = self._session_key(event)
-            pool = self.group_settings.get(session_key).pool
-            game = self.registries[pool].current_game(session_key)
-            if game is None:
-                yield event.plain_result(self._no_game_text(pool))
-            else:
+            games = [
+                (pool, game)
+                for pool in _POOL_LABELS
+                if (game := self.registries[pool].current_game(session_key)) is not None
+            ]
+            if not games:
+                yield event.plain_result(self._no_game_text())
+                return
+            for pool, game in games:
                 yield await self._respond_board(event, game, pool)
         finally:
             event.stop_event()
@@ -491,58 +480,26 @@ class ArkGuessPlugin(Star):
         )
 
     @staticmethod
-    def _start_pool_trigger(pool: str) -> str:
-        return MAIN_START_TRIGGER if pool == POOL_OPERATOR else ENEMY_START_TRIGGER
-
-    @staticmethod
-    def _switch_pool_trigger(pool: str) -> str:
-        return SWITCH_OPERATOR_TRIGGER if pool == POOL_OPERATOR else SWITCH_ENEMY_TRIGGER
-
-    def _missing_name_text(self, pool: str) -> str:
+    def _missing_name_text(pool: str) -> str:
         if pool == POOL_OPERATOR:
-            return (
-                "开局需要干员名称。请发送 @机器人 猜干员 <干员名> "
-                "或 粥一把 <干员名>。"
-            )
+            return "开局需要干员名称。请发送 @机器人 猜干员 <干员名>，或发送 玛一把。"
         return "开局需要敌人名称。请发送 @机器人 猜敌人 <敌人名>。"
 
-    def _no_game_text(self, pool: str) -> str:
+    @staticmethod
+    def _no_game_text() -> str:
         return (
-            f"当前群没有对局，艾特机器人并发送 {self._start_pool_trigger(pool)} "
-            "开始一局。"
+            "当前群没有对局。\n"
+            "干员：@机器人 猜干员 <干员名>（或 玛一把）\n"
+            "敌人：@机器人 猜敌人 <敌人名>"
         )
 
-    def _switch_pool(self, session_key: str, target: str) -> str:
-        """切换本群题库；切换前一局必须先结束。"""
-        current = self.group_settings.get(session_key)
-        target_label = _POOL_LABELS[target]
-        if current.pool == target:
-            return (
-                f"ℹ️ 本群当前已经是{target_label}池。\n"
-                f"开局：@机器人 {self._start_pool_trigger(target)} <{target_label}名>"
-            )
-
-        game = self.registries[current.pool].current_game(session_key)
-        if game is not None and game.playing:
-            return (
-                f"⚠️ 本群还有进行中的{_POOL_LABELS[current.pool]}对局 {game.id}。\n"
-                "发送 不猜了 结束对局后再切换题库。"
-            )
-
-        updated = replace(current, pool=target)
-        self.group_settings.set(session_key, updated)
-        pool_size = len(self.registries[target].pool.items)
-        lines = [
-            f"✅ 已切换到{target_label}池",
-            f"题库：{pool_size} 名{target_label} ｜ "
-            f"最大猜测次数：{self._attempts_text(updated)}",
-        ]
-        if target == POOL_OPERATOR:
-            lines.append(f"答案稀有度：{self._rarity_text(updated)}")
-        lines.append(
-            f"开局：@机器人 {self._start_pool_trigger(target)} <{target_label}名>"
-        )
-        return "\n".join(lines)
+    def _can_resolve(self, pool: str, text: str) -> bool:
+        """判断名称能否在该题库中解析，用于两个池同时进行时分流猜测。"""
+        try:
+            self.registries[pool].pool.resolve(text)
+        except ArkGuessError:
+            return False
+        return True
 
     @staticmethod
     def _rarity_text(settings: GroupSettings) -> str:
@@ -555,14 +512,11 @@ class ArkGuessPlugin(Star):
     def _difficulty_text(self, session_key: str) -> str:
         settings = self.group_settings.get(session_key)
         source = "本群自定义" if self.group_settings.has(session_key) else "默认"
-        label = _POOL_LABELS[settings.pool]
         return (
             f"⚙️ 本群设置（{source}）\n"
-            f"当前题库：{label}\n"
             f"答案稀有度：{self._rarity_text(settings)}（仅干员池生效）\n"
-            f"最大猜测次数：{self._attempts_text(settings)}\n"
-            "切换题库：/更换干员池 或 /更换敌人池\n"
-            f"修改：角色池设置 1256；猜测次数 8；-1 表示不限"
+            f"最大猜测次数：{self._attempts_text(settings)}（干员 / 敌人共用）\n"
+            "修改：/干员池稀有度 1256；/猜测次数 8（-1 不限）"
         )
 
     def _ensure_cleanup_task(self) -> None:
