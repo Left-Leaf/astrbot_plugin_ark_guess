@@ -332,7 +332,9 @@ class RenderTests(unittest.TestCase):
         registry = GameRegistry(pool)
         game = registry.create("s", answer_id="char_debut")
         asyncio.run(registry.submit("s", "玛恩纳"))
-        self.assertIn("登场：日暮寻路", render_board(game, pool))
+        text = render_board(game, pool)
+        self.assertIn("日暮寻路", text)
+        self.assertNotIn("登场：", text)
 
         with tempfile.TemporaryDirectory() as tmp:
             path = render_board_image(game, pool, tmp)

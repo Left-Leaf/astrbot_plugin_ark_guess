@@ -49,7 +49,7 @@ def _operator_cells(item: object, result: CompareResult) -> tuple[Cell, ...]:
         Cell(
             str(operator.release_year),
             result.d5,
-            f"登场：{operator.debut}" if operator.debut else "",
+            operator.debut,
         ),
     )
 
